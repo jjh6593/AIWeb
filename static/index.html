@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>데이터 입력 - AIWEB</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <!-- 사이드바 -->
+    <div class="d-flex">
+        <div class="bg-light p-3" style="width: 200px;">
+            <h5 class="text-center">AIWEB</h5>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link active" href="index.html">데이터 입력</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="model_creation.html">모델 생성</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="model_training.html">모델 학습</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="training_results.html">학습 결과</a>
+                </li>
+            </ul>
+        </div>
+        <!-- 메인 콘텐츠 -->
+        <div class="container-fluid p-4">
+            <h4>데이터 입력</h4>
+            <!-- 파일 업로드 폼 -->
+            <form id="uploadForm">
+                <div class="mb-3">
+                    <label for="fileInput" class="form-label">CSV 파일 업로드</label>
+                    <input type="file" class="form-control" id="fileInput" name="file" accept=".csv">
+                </div>
+                <button type="submit" class="btn btn-primary">업로드</button>
+                <button type="button" class="btn btn-secondary" id="loadFileButton">불러오기</button>
+            </form>
+            <hr>
+            <!-- 불러오기 모달 -->
+            <div class="modal fade" id="loadFileModal" tabindex="-1" aria-labelledby="loadFileModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="loadFileModalLabel">파일 불러오기</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <ul id="serverFileList" class="list-group">
+                                <!-- 서버에서 불러온 파일 목록 -->
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 업로드된 파일 목록 -->
+            <h5>업로드된 파일 목록</h5>
+            <ul id="fileList" class="list-group"></ul>
+             <!-- 데이터 헤드 미리보기 -->
+             <h5>데이터 미리보기</h5>
+             <div id="dataPreview"></div>
+             <!-- 사용자 입력 -->
+            <hr>
+            <!-- <h5>데이터 설정</h5>
+            <form id="dataSettingsForm">
+                <div id="columnSettings"></div>
+                <div class="mb-3">
+                    <label for="targetColumn" class="form-label">타겟(Target) 열 선택</label>
+                    <select id="targetColumn" class="form-select" required></select>
+                </div>
+                <div class="mb-3">
+                    <label for="scaler" class="form-label">스케일러 선택</label>
+                    <select id="scaler" class="form-select">
+                        <option value="none">None</option>
+                        <option value="standard">Standard</option>
+                        <option value="minmax">Min-Max</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="missingHandling" class="form-label">결측치 처리 방법</label>
+                    <select id="missingHandling" class="form-select">
+                        <option value="none">처리 안 함</option>
+                        <option value="drop">제거</option>
+                        <option value="mode">최빈값으로 대체</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-success" id="submitSettings">다음</button>
+            </form> -->
+            <h5>데이터 설정</h5>
+            <form id="dataSettingsForm">
+                <div id="columnSettings" class="container-fluid">
+                    <!-- 각 컬럼 입력 필드가 여기에 동적으로 추가됩니다 -->
+                </div>
+                <div class="mt-3">
+                    <label for="targetColumn" class="form-label">타겟(Target) 열 선택</label>
+                    <select id="targetColumn" class="form-select" required></select>
+                </div>
+                <div class="mt-3">
+                    <label for="scaler" class="form-label">스케일러 선택</label>
+                    <select id="scaler" class="form-select">
+                        <option value="none">None</option>
+                        <option value="standard">Standard</option>
+                        <option value="minmax">Min-Max</option>
+                    </select>
+                </div>
+                <div class="mt-3">
+                    <label for="missingHandling" class="form-label">결측치 처리 방법</label>
+                    <select id="missingHandling" class="form-select">
+                        <option value="none">처리 안 함</option>
+                        <option value="drop">제거</option>
+                        <option value="mode">최빈값으로 대체</option>
+                    </select>
+                </div>
+                <button type="button" class="btn btn-success mt-3" id="submitSettings">다음</button>
+            </form>
+        </div>
+    </div>
+    <!-- Bootstrap JS 및 커스텀 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
