@@ -1,3 +1,7 @@
 /app
 /utils
 /__pycache__
+uploads/qqe.csv
+models/엘라스틱넷.json
+models/선형회귀.json
+static/css/style.css

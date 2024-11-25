@@ -62,32 +62,21 @@
              <div id="dataPreview"></div>
              <!-- 사용자 입력 -->
             <hr>
-            <!-- <h5>데이터 설정</h5>
-            <form id="dataSettingsForm">
-                <div id="columnSettings"></div>
-                <div class="mb-3">
-                    <label for="targetColumn" class="form-label">타겟(Target) 열 선택</label>
-                    <select id="targetColumn" class="form-select" required></select>
-                </div>
-                <div class="mb-3">
-                    <label for="scaler" class="form-label">스케일러 선택</label>
-                    <select id="scaler" class="form-select">
-                        <option value="none">None</option>
-                        <option value="standard">Standard</option>
-                        <option value="minmax">Min-Max</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="missingHandling" class="form-label">결측치 처리 방법</label>
-                    <select id="missingHandling" class="form-select">
-                        <option value="none">처리 안 함</option>
-                        <option value="drop">제거</option>
-                        <option value="mode">최빈값으로 대체</option>
-                    </select>
-                </div>
-                <button type="button" class="btn btn-success" id="submitSettings">다음</button>
-            </form> -->
-            <h5>데이터 설정</h5>
+            <!-- 컬럼 제외 및 파일 저장 -->
+            <div class="container-fluid">
+                <h5>데이터 설정</h5>
+                <form id="excludeColumnsForm">
+                    <div id="excludeColumns" class="row">
+                        <!-- 각 컬럼이 여기에 동적으로 추가됩니다 -->
+                    </div>
+                    <div class="mt-3">
+                        <label for="newFilename" class="form-label">새 파일 이름</label>
+                        <input type="text" class="form-control" id="newFilename" placeholder="새 파일 이름을 입력하세요 (예: filtered_data.csv)" required>
+                    </div>
+                    <button type="button" class="btn btn-primary mt-3" id="saveFilteredFile">필터링된 데이터 저장</button>
+                </form>
+            </div>
+            
             <form id="dataSettingsForm">
                 <div id="columnSettings" class="container-fluid">
                     <!-- 각 컬럼 입력 필드가 여기에 동적으로 추가됩니다 -->
