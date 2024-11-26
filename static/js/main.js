@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const dataPreview = document.getElementById('dataPreview');
     const columnSettings = document.getElementById('columnSettings');
     const targetColumn = document.getElementById('targetColumn');
+    const loadFileButton = document.getElementById('loadFileButton');
+    const serverFileList = document.getElementById('serverFileList');
+    const loadFileModalElement = document.getElementById('loadFileModal');
+    const loadFileModal = new bootstrap.Modal(loadFileModalElement);
+
 
     let uploadedFilename = '';
 
@@ -33,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
      // 불러오기 버튼 클릭 이벤트
      loadFileButton.addEventListener('click', function() {
-        
+
         fetch('/api/get_csv_files')
         .then(response => response.json())
         .then(data => {
@@ -49,11 +54,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadButton.textContent = '불러오기';
                     loadButton.classList.add('btn', 'btn-sm', 'btn-primary');
                     loadButton.addEventListener('click', function() {
-                        
+
                         uploadedFilename = file; // 불러온 파일명을 uploadedFilename에 저장
                         console.log('Loaded Filename:', uploadedFilename); // 디버깅용
                         loadCSVPreview(file);
                         alert(`${file} 파일을 불러왔습니다.`);
+                        loadFileModal.hide();
                     });
 
                     listItem.appendChild(loadButton);
@@ -61,15 +67,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 // 모달 표시
-                const modal = new bootstrap.Modal(document.getElementById('loadFileModal'));
-                modal.show();
+                loadFileModal.show();
             } else {
                 alert(data.message);
             }
         })
         .catch(error => console.error('Error:', error));
     });
-    
+
     // 데이터 미리보기와 컬럼 제외 기능 추가
     function loadCSVPreview(filename) {
         fetch(`/api/get_csv_data?filename=${filename}`)
@@ -112,7 +117,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     excludeColumns.innerHTML = '';
                     data.columns.forEach(col => {
                         const div = document.createElement('div');
-                        div.classList.add('form-check');
+                        div.classList.add('col-md-3', 'col-sm-6');
+
+                        const formCheckDiv = document.createElement('div');
+                        formCheckDiv.classList.add('form-check');
 
                         const input = document.createElement('input');
                         input.type = 'checkbox';
@@ -125,9 +133,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         label.setAttribute('for', `exclude-${col}`);
                         label.textContent = col;
 
-                        div.appendChild(input);
-                        div.appendChild(label);
+                        formCheckDiv.appendChild(input);
+                        formCheckDiv.appendChild(label);
+                        div.appendChild(formCheckDiv);
                         excludeColumns.appendChild(div);
+
                     });
                 } else {
                     alert(data.message);
@@ -140,23 +150,23 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('saveFilteredFile').addEventListener('click', () => {
         const checkedColumns = Array.from(document.querySelectorAll('#excludeColumns input:checked')).map(input => input.value);
         const newFilename = document.getElementById('newFilename').value;
-    
+
         if (!newFilename) {
             alert('새 파일 이름을 입력하세요.');
             return;
         }
-    
+
         if (!uploadedFilename) {
             alert('업로드된 파일이 없습니다. 파일을 업로드하거나 불러와 주세요.');
             return;
         }
-    
+
         const payload = {
             exclude_columns: checkedColumns,
             new_filename: newFilename,
             filename: uploadedFilename // 업로드된 또는 불러온 파일 이름을 전달
         };
-        
+
         fetch('/api/save_filtered_csv', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -172,7 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => console.error('Error:', error));
     });
-        
+
         // 데이터 컬럼 체크박스 동적 생성
     function loadCSVPreview(filename) {
         fetch(`/api/get_csv_data?filename=${filename}`)
@@ -180,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.status === 'success') {
                     const excludeColumns = document.getElementById('excludeColumns');
-                    
+
                     // 데이터 미리보기 렌더링
                     const dataPreview = document.getElementById('dataPreview');
                     const table = document.createElement('table');
@@ -211,11 +221,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     dataPreview.innerHTML = '';
                     dataPreview.appendChild(table);
 
-                    // 컬럼 제외 체크박스 렌더링 (가로 배치)
+                    // index.html 데이터 설정 - 컬럼 제외 체크박스 렌더링 (가로 배치)
                     excludeColumns.innerHTML = '';
                     data.columns.forEach(col => {
                         const div = document.createElement('div');
-                        div.classList.add('col-md-3', 'form-check'); // 한 줄에 4개 배치
+                        div.classList.add('col-md-3', 'form-check');
 
                         const input = document.createElement('input');
                         input.type = 'checkbox';
@@ -223,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         input.id = `exclude-${col}`;
                         input.value = col;
 
-                        const label = document.createElement('label');
+                        const label = document.createElement('span');
                         label.classList.add('form-check-label');
                         label.setAttribute('for', `exclude-${col}`);
                         label.textContent = col;
@@ -261,7 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => console.error('Error:', error));
-        });     
+        });
     // 폼 제출 방지 (페이지 새로고침 방지)
     document.getElementById('excludeColumnsForm').addEventListener('submit', function(event) {
         event.preventDefault();
@@ -275,8 +285,8 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('saveFilteredFile').click(); // 버튼 클릭 실행
         }
     });
-    
-    
+
+
 
     });
 
@@ -290,19 +300,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 'SVR', 'KNeighborsRegressor', 'HuberRegressor', 'GaussianProcessRegressor', 'XGBoost'
             ]
         };
-    
+
         // 요소 선택
         const modelTypeSelect = document.getElementById('modelType');
         const modelListDropdown = document.getElementById('modelListDropdown');
-    
+
         // 모델 타입 선택 시, 모델 목록 표시
         modelTypeSelect.addEventListener('change', function() {
             const selectedType = modelTypeSelect.value;
             console.log('선택된 모델 타입:', selectedType);
-    
+
             // 모델 목록 초기화
             modelListDropdown.innerHTML = '';
-    
+
             if (selectedType && modelOptions[selectedType]) {
                 console.log('해당 모델 타입의 모델 목록을 표시합니다.');
                 // 모델 목록 생성
@@ -312,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.textContent = model;
                     modelListDropdown.appendChild(option);
                 });
-    
+
                 // 모델 목록 활성화
                 modelListDropdown.disabled = false;
             } else {
@@ -325,7 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 modelListDropdown.disabled = true;
             }
         });
-    
+
         // 모델 생성 폼 제출 이벤트
         const modelForm = document.getElementById('modelForm');
         modelForm.addEventListener('submit', function(event) {
@@ -333,18 +343,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const modelType = modelTypeSelect.value;
             const modelSelected = modelListDropdown.value;
             const modelName = document.getElementById('modelName').value;
-    
+
             if (!modelType || !modelSelected || !modelName) {
                 alert('모델 타입, 모델 선택, 그리고 모델 이름을 입력하세요.');
                 return;
             }
-    
+
             const modelInfo = {
                 model_type: modelType,
                 model_name: modelName,
                 model_selected: modelSelected
             };
-    
+
             fetch('/api/save_model', {
                 method: 'POST',
                 headers: {
@@ -359,7 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => console.error('Error:', error));
         });
-    
+
         // 저장된 모델 목록 로드
         function loadModelList() {
             fetch('/api/get_models')
@@ -371,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const li = document.createElement('li');
                     li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
                     li.textContent = `${model.model_name} (${model.model_selected})`;
-    
+
                     // 삭제 버튼 추가
                     const deleteButton = document.createElement('button');
                     deleteButton.classList.add('btn', 'btn-danger', 'btn-sm');
@@ -393,14 +403,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             .catch(error => console.error('Error:', error));
                         }
                     });
-    
+
                     li.appendChild(deleteButton);
                     modelList.appendChild(li);
                 });
             })
             .catch(error => console.error('Error:', error));
         }
-    
+
         // 초기 모델 목록 로드
         loadModelList();
     });
@@ -409,22 +419,22 @@ document.addEventListener('DOMContentLoaded', function() {
         const uploadModelForm = document.getElementById('uploadModelForm');
         uploadModelForm.addEventListener('submit', function (event) {
             event.preventDefault();
-    
+
             const modelFileInput = document.getElementById('uploadedModel');
             const modelNameInput = document.getElementById('uploadedModelName');
-    
+
             const modelFile = modelFileInput.files[0];
             const modelName = modelNameInput.value;
-    
+
             if (!modelFile || !modelName) {
                 alert('모델 파일과 이름을 입력하세요.');
                 return;
             }
-    
+
             const formData = new FormData();
             formData.append('model_file', modelFile);
             formData.append('model_name', modelName);
-    
+
             fetch('/api/upload_model', {
                 method: 'POST',
                 body: formData
@@ -440,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => console.error('Error:', error));
         });
-    
+
         // 기존 로드 모델 목록 로드 함수와 통합 가능
         function loadModelList() {
             fetch('/api/get_models')
@@ -452,7 +462,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const li = document.createElement('li');
                     li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
                     li.textContent = `${model.model_name} (${model.type || '생성된 모델'})`;
-    
+
                     // 삭제 버튼 추가
                     const deleteButton = document.createElement('button');
                     deleteButton.classList.add('btn', 'btn-danger', 'btn-sm');
@@ -474,14 +484,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             .catch(error => console.error('Error:', error));
                         }
                     });
-    
+
                     li.appendChild(deleteButton);
                     modelList.appendChild(li);
                 });
             })
             .catch(error => console.error('Error:', error));
         }
-    
+
         // 초기 모델 목록 로드
         loadModelList();
     });

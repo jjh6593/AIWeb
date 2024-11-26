@@ -2,109 +2,152 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>데이터 입력 - AIWEB</title>
+    <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- 커스텀 CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- 사이드바 -->
-    <div class="d-flex">
-        <div class="bg-light p-3" style="width: 200px;">
-            <h5 class="text-center">AIWEB</h5>
-            <ul class="nav flex-column">
-                <li class="nav-item">
-                    <a class="nav-link active" href="index.html">데이터 입력</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="model_creation.html">모델 생성</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="model_training.html">모델 학습</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="training_results.html">학습 결과</a>
-                </li>
-            </ul>
+    <!-- 네비게이션 바 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">AIWEB</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="토글 네비게이션">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.html">데이터 입력</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="model_creation.html">모델 생성</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="model_training.html">모델 학습</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="training_results.html">학습 결과</a>
+                    </li>
+                </ul>
+            </div>
         </div>
-        <!-- 메인 콘텐츠 -->
-        <div class="container-fluid p-4">
-            <h4>데이터 입력</h4>
-            <!-- 파일 업로드 폼 -->
-            <form id="uploadForm">
-                <div class="mb-3">
-                    <label for="fileInput" class="form-label">CSV 파일 업로드</label>
-                    <input type="file" class="form-control" id="fileInput" name="file" accept=".csv">
+    </nav>
+
+    <!-- 메인 콘텐츠 -->
+    <div class="container my-4">
+        <h3 class="mb-4 text-center">데이터 입력</h3>
+
+        <!-- 파일 업로드 및 데이터 설정 -->
+        <div class="row g-4">
+            <!-- 파일 업로드 -->
+            <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">CSV 파일 업로드</h5>
+                        <form id="uploadForm">
+                            <div class="mb-3">
+                                <label for="fileInput" class="form-label">파일 선택</label>
+                                <input type="file" class="form-control" id="fileInput" name="file" accept=".csv">
+                            </div>
+                            <div class="d-flex justify-content-between gap-2">
+                                <button type="submit" class="btn btn-primary">업로드</button>
+                                <button type="button" class="btn btn-outline-secondary" id="loadFileButton" data-bs-toggle="modal" data-bs-target="#loadFileModal">불러오기</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-                <button type="submit" class="btn btn-primary">업로드</button>
-                <button type="button" class="btn btn-secondary" id="loadFileButton">불러오기</button>
-            </form>
-            <hr>
-            <!-- 불러오기 모달 -->
-            <div class="modal fade" id="loadFileModal" tabindex="-1" aria-labelledby="loadFileModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="loadFileModalLabel">파일 불러오기</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <ul id="serverFileList" class="list-group">
-                                <!-- 서버에서 불러온 파일 목록 -->
-                            </ul>
+            </div>
+
+            <!-- 데이터 미리보기 -->
+            <div class="col-md-8">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">데이터 미리보기</h5>
+                        <div id="dataPreview" class="table-responsive">
+                            <!-- 데이터 테이블이 여기에 표시됩니다 -->
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- 업로드된 파일 목록 -->
-            <h5>업로드된 파일 목록</h5>
-            <ul id="fileList" class="list-group"></ul>
-             <!-- 데이터 헤드 미리보기 -->
-             <h5>데이터 미리보기</h5>
-             <div id="dataPreview"></div>
-             <!-- 사용자 입력 -->
-            <hr>
-            <!-- 컬럼 제외 및 파일 저장 -->
-            <div class="container-fluid">
-                <h5>데이터 설정</h5>
-                <form id="excludeColumnsForm">
-                    <div id="excludeColumns" class="row">
-                        <!-- 각 컬럼이 여기에 동적으로 추가됩니다 -->
+
+            <!-- 데이터 설정 -->
+            <div class="col-md-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">데이터 설정</h5>
+                        <form id="excludeColumnsForm">
+                            <div id="excludeColumns" class="row mb-3">
+                                <!-- 각 컬럼이 여기에 동적으로 추가됩니다 -->
+                            </div>
+                            <div class="mb-3">
+                                <label for="newFilename" class="form-label">새 파일 이름</label>
+                                <input type="text" class="form-control" id="newFilename" placeholder="새 파일 이름을 입력하세요 (예: filtered_data.csv)" required>
+                            </div>
+                            <button type="button" class="btn btn-success" id="saveFilteredFile">필터링된 데이터 저장</button>
+                        </form>
                     </div>
-                    <div class="mt-3">
-                        <label for="newFilename" class="form-label">새 파일 이름</label>
-                        <input type="text" class="form-control" id="newFilename" placeholder="새 파일 이름을 입력하세요 (예: filtered_data.csv)" required>
-                    </div>
-                    <button type="button" class="btn btn-primary mt-3" id="saveFilteredFile">필터링된 데이터 저장</button>
-                </form>
+                </div>
             </div>
-            
-            <form id="dataSettingsForm">
-                <div id="columnSettings" class="container-fluid">
-                    <!-- 각 컬럼 입력 필드가 여기에 동적으로 추가됩니다 -->
+
+            <!-- 추가 데이터 설정 -->
+            <div class="col-md-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">추가 데이터 설정</h5>
+                        <form id="dataSettingsForm">
+                            <div id="columnSettings" class="container-fluid mb-3">
+                                <!-- 각 컬럼 입력 필드가 여기에 동적으로 추가됩니다 -->
+                            </div>
+                            <div class="mb-3">
+                                <label for="targetColumn" class="form-label">타겟(Target) 열 선택</label>
+                                <select id="targetColumn" class="form-select" required></select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="scaler" class="form-label">스케일러 선택</label>
+                                <select id="scaler" class="form-select">
+                                    <option value="none">None</option>
+                                    <option value="standard">Standard</option>
+                                    <option value="minmax">Min-Max</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="missingHandling" class="form-label">결측치 처리 방법</label>
+                                <select id="missingHandling" class="form-select">
+                                    <option value="none">처리 안 함</option>
+                                    <option value="drop">제거</option>
+                                    <option value="mode">최빈값으로 대체</option>
+                                </select>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="submitSettings">다음</button>
+                        </form>
+                    </div>
                 </div>
-                <div class="mt-3">
-                    <label for="targetColumn" class="form-label">타겟(Target) 열 선택</label>
-                    <select id="targetColumn" class="form-select" required></select>
-                </div>
-                <div class="mt-3">
-                    <label for="scaler" class="form-label">스케일러 선택</label>
-                    <select id="scaler" class="form-select">
-                        <option value="none">None</option>
-                        <option value="standard">Standard</option>
-                        <option value="minmax">Min-Max</option>
-                    </select>
-                </div>
-                <div class="mt-3">
-                    <label for="missingHandling" class="form-label">결측치 처리 방법</label>
-                    <select id="missingHandling" class="form-select">
-                        <option value="none">처리 안 함</option>
-                        <option value="drop">제거</option>
-                        <option value="mode">최빈값으로 대체</option>
-                    </select>
-                </div>
-                <button type="button" class="btn btn-success mt-3" id="submitSettings">다음</button>
-            </form>
+            </div>
         </div>
     </div>
+
+    <!-- 모달: 파일 불러오기 -->
+    <div class="modal fade" id="loadFileModal" tabindex="-1" aria-labelledby="loadFileModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">파일 불러오기</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+                </div>
+                <div class="modal-body">
+                    <ul id="serverFileList" class="list-group">
+                        <!-- 서버에서 불러온 파일 목록 -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bootstrap JS 및 커스텀 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/main.js"></script>

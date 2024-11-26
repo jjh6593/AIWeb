@@ -1,0 +1,209 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+
+/* 기본 스타일 */
+body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background-color: #f5f7fa;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+/* 네비게이션 바 */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-weight: 600;
+    font-size: 1.5rem;
+}
+
+/* 제목 스타일 */
+h2, h3, h5 {
+    font-weight: 700;
+}
+
+/* 카드 스타일 */
+.card {
+    border: none;
+    border-radius: 12px;
+}
+
+.card-title {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+/* 버튼 스타일 */
+.btn {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.btn-primary {
+    background-color: #4e73df;
+    border-color: #4e73df;
+}
+
+.btn-primary:hover {
+    background-color: #2e59d9;
+    border-color: #2653d4;
+}
+
+.btn-success {
+    background-color: #1cc88a;
+    border-color: #17a673;
+}
+
+.btn-success:hover {
+    background-color: #17a673;
+    border-color: #138f65;
+}
+
+.btn-outline-secondary {
+    border-color: #858796;
+    color: #858796;
+}
+
+.btn-outline-secondary:hover {
+    background-color: #858796;
+    color: #fff;
+}
+
+/* 입력 필드 스타일 */
+.form-control, .form-select {
+    border-radius: 8px;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #4e73df;
+    box-shadow: none;
+}
+
+/* 데이터 미리보기 테이블 */
+#dataPreview table {
+    margin-bottom: 0;
+}
+
+#dataPreview th, #dataPreview td {
+    white-space: nowrap;
+}
+
+/* 모달 스타일 */
+.modal-content {
+    border-radius: 12px;
+}
+
+.modal-header {
+    border-bottom: none;
+}
+
+.modal-title {
+    font-weight: 700;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+}
+
+/* 리스트 그룹 */
+.list-group-item {
+    border: none;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 제외 체크박스 스타일 */
+.form-check-input {
+    cursor: pointer;
+}
+
+.form-check-label {
+    cursor: pointer;
+}
+
+/* 체크박스 컨테이너 스타일 */
+#excludeColumns .form-check {
+    position: relative;
+    display: inline-block;
+    width: auto;
+    margin: 0.25rem;
+}
+
+/* 체크박스를 숨기고 커스텀 버튼으로 대체 */
+#excludeColumns .form-check-input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
+/* 레이블을 버튼처럼 스타일링 */
+#excludeColumns .form-check-label {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: #f8f9fa;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #495057;
+    font-weight: 500;
+    text-align: center;
+    width: 100%;
+}
+
+/* 체크된 상태에서의 스타일 변경 */
+#excludeColumns .form-check-input:checked + .form-check-label {
+    background-color: #4e73df;
+    border-color: #4e73df;
+    color: #fff;
+}
+
+/* 호버 효과 */
+#excludeColumns .form-check-label:hover {
+    background-color: #e2e6ea;
+    border-color: #dae0e5;
+}
+
+/* 반응형 레이아웃 조정 */
+#excludeColumns .col-md-3,
+#excludeColumns .col-sm-6 {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 767.98px) {
+    .navbar-brand {
+        font-size: 1.25rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    .card-title {
+        font-size: 1.125rem;
+    }
+
+    #excludeColumns {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
+/* 체크박스와 레이블 간의 간격 조절 */
+.form-check-input {
+    margin-right: 0.5rem;
+}
+
+/* 체크박스 레이블 스타일 */
+.form-check-label {
+    font-weight: 500;
+}
