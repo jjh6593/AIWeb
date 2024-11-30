@@ -1,0 +1,9 @@
+{
+    "model_type": "scikit",
+    "model_name": "결정트리",
+    "model_selected": "DecisionTreeRegressor",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models\\결정트리\\결정트리.pkl",
+    "input_size": null
+}

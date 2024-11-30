@@ -1,0 +1,8 @@
+{
+    "model_type": "scikit",
+    "model_name": "sss",
+    "model_selected": "LinearRegressor",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models\\sss\\sss.pkl"
+}

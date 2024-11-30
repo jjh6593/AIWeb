@@ -51,6 +51,11 @@
                     <label for="modelName" class="form-label">모델 이름 입력</label>
                     <input type="text" class="form-control" id="modelName" name="model_name" placeholder="모델 이름">
                 </div>
+                <!-- PyTorch 모델의 경우 input_size 입력 필드 추가 -->
+                <div class="mb-3" id="inputSizeField" style="display: none;">
+                    <label for="inputSize" class="form-label">Input Size</label>
+                    <input type="number" class="form-control" id="inputSize" placeholder="PyTorch 모델의 Input Size">
+                </div>
                 <button type="submit" class="btn btn-success">모델 저장</button>
             </form>
             <!-- 모델 업로드 폼 -->
