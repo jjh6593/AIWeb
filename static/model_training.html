@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="styles.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <script src="js/training.js" defer></script>
     <script src="js/navbar.js" defer></script> <!-- 네비게이션 바 로드 스크립트 -->
     <script src="js/nextStep.js" defer></script> <!-- 다음 버튼 -->
 </head>
@@ -19,12 +20,10 @@
 <div class="container my-4">
     <h3 class="mb-4 text-center">모델 학습</h3>
     <div class="row g-4">
-        <form id="trainingForm">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">모델 학습</h5>
-                    <!-- 모델 학습 폼 -->
-
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <!-- 모델 학습 폼 -->
+                <form id="trainingForm">
                     <div class="mb-3">
                         <label for="csvFileSelect" class="form-label">CSV 파일 선택</label>
                         <select class="form-select" id="csvFileSelect" name="csv_filename"></select>
@@ -50,11 +49,10 @@
                     <h5 class="mt-4">선택된 모델 리스트</h5>
                     <ul id="modelList" class="list-group mb-3"></ul>
                     <button type="submit" class="btn btn-primary">학습 시작</button>
-
-                    <div id="trainingProgress" class="mt-1"></div>
-                </div>
+                </form>
+                <div id="trainingProgress" class="mt-1"></div>
             </div>
-        </form>
+        </div>
     </div>
     <div class="my-4">
         <button class="btn btn-primary" id="nextButton">다음</button>
@@ -62,6 +60,6 @@
 </div>
 <!-- Bootstrap JS 및 커스텀 JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="js/training.js"></script>
+<!-- <script src="js/main.js"></script> -->
 </body>
 </html>
