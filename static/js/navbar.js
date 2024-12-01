@@ -2,7 +2,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const navbarContainer = document.getElementById('navbar');
 
     // 현재 페이지 URL에서 파일 이름 추출
-    const currentPage = window.location.pathname.split('/').pop().replace('.html', '');
+    let currentPage = window.location.pathname.split('/').pop().replace('.html', '');
+
+    // 만약 currentPage가 빈 문자열이라면, 'index'로 설정
+    if (currentPage === '') {
+        currentPage = 'index';
+    }
 
     // 네비게이션 바 HTML 파일 로드
     fetch('navbar.html')
