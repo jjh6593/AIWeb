@@ -69,12 +69,14 @@ document.addEventListener("DOMContentLoaded", function () {
         startingPointInput.appendChild(row); // Row 추가
 
         columns.forEach(col => {
-            const colWrapper = document.createElement('div'); // Wrapper (Column)
-            colWrapper.className = 'col-md-2 mb-3'; // Grid 레이아웃 (3열 구조)
-            row.appendChild(colWrapper); // Row에 추가
+            if (col !== 'Target' && col !== 'target') {
+                const colWrapper = document.createElement('div'); // Wrapper (Column)
+                colWrapper.className = 'col-md-2 mb-3'; // Grid 레이아웃 (3열 구조)
+                row.appendChild(colWrapper); // Row에 추가
 
-            // input field를 Wrapper 안에 생성
-            createInputField(col, `startingPoint_${col}`, `startingPoint_${col}`, 'text', colWrapper);
+                // input field를 Wrapper 안에 생성
+                createInputField(col, `startingPoint_${col}`, `startingPoint_${col}`, 'text', colWrapper);
+            }
         });
     }
 
@@ -192,22 +194,22 @@ document.addEventListener("DOMContentLoaded", function () {
                 break;
             case 'Best One':
                 createRadioButtonGroup('escape', [
-                    { value: 'true', label: 'True' },
-                    { value: 'false', label: 'False' }
+                    {value: 'true', label: 'True'},
+                    {value: 'false', label: 'False'}
                 ]);
                 break;
             case 'Brute Force':
                 createInputField('Top K', 'topK', 'topK');
                 createRadioButtonGroup('partialKeep', [
-                    { value: 'true', label: 'True' },
-                    { value: 'false', label: 'False' }
+                    {value: 'true', label: 'True'},
+                    {value: 'false', label: 'False'}
                 ]);
                 break;
             case 'Manual':
                 createInputField('Index', 'index', 'index');
                 createRadioButtonGroup('up', [
-                    { value: 'true', label: 'True' },
-                    { value: 'false', label: 'False' }
+                    {value: 'true', label: 'True'},
+                    {value: 'false', label: 'False'}
                 ]);
                 break;
             // 추가 전략이 있을 경우 여기에 추가
