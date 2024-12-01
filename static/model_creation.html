@@ -3,84 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <title>모델 생성 - AIWEB</title>
+    <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- 커스텀 CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <script src="js/navbar.js" defer></script> <!-- 네비게이션 바 로드 스크립트 -->
 </head>
-<body>
-    <!-- 사이드바 -->
-    <div class="d-flex">
-        <div class="bg-light p-3" style="width: 200px;">
-            <h5 class="text-center">AIWEB</h5>
-            <ul class="nav flex-column">
-                <li class="nav-item">
-                    <a class="nav-link" href="index.html">데이터 입력</a>
-                </li>
-                <li class="nav-link active">
-                    <a class="nav-link" href="model_creation.html">모델 생성</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="model_training.html">모델 학습</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="training_results.html">학습 결과</a>
-                </li>
-            </ul>
-        </div>
-        <!-- 메인 콘텐츠 -->
-        <div class="container-fluid p-4">
-            <h4>모델 생성</h4>
-            <!-- 모델 생성 폼 -->
-            <form id="modelForm">
-                <!-- 모델 타입 선택 -->
-                <div class="mb-3">
-                    <label for="modelType" class="form-label">모델 타입 선택</label>
-                    <select class="form-select" id="modelType" name="model_type">
-                        <option value="">선택하세요</option>
-                        <option value="pytorch">Pytorch</option>
-                        <option value="scikit">Scikit-learn</option>
-                    </select>
+<body data-page="model_creation">
+<!-- 네비게이션 바 -->
+<div id="navbar"></div>
+
+<!-- 메인 콘텐츠 -->
+<div class="container my-4">
+    <h3 class="mb-4 text-center">모델 생성</h3>
+    <!-- 모델 생성 폼 -->
+    <div class="row g-4">
+        <form id="modelForm">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">모델 생성</h5>
+                    <!-- 모델 타입 선택 -->
+                    <div class="mb-3">
+                        <label for="modelType" class="form-label">모델 타입 선택</label>
+                        <select class="form-select" id="modelType" name="model_type">
+                            <option value="">선택하세요</option>
+                            <option value="pytorch">Pytorch</option>
+                            <option value="scikit">Scikit-learn</option>
+                        </select>
+                    </div>
+                    <!-- 모델 목록 표시 -->
+                    <div class="mb-3">
+                        <label for="modelListDropdown" class="form-label">모델 목록</label>
+                        <select class="form-select" id="modelListDropdown" name="model_selected" disabled>
+                            <option value="">모델 타입을 먼저 선택하세요</option>
+                        </select>
+                    </div>
+                    <!-- 모델 이름 입력 -->
+                    <div class="mb-3">
+                        <label for="modelName" class="form-label">모델 이름 입력</label>
+                        <input type="text" class="form-control" id="modelName" name="model_name" placeholder="모델 이름">
+                    </div>
+                    <!-- PyTorch 모델의 경우 input_size 입력 필드 추가 -->
+                    <div class="mb-3" id="inputSizeField" style="display: none;">
+                        <label for="inputSize" class="form-label">Input Size</label>
+                        <input type="number" class="form-control" id="inputSize" placeholder="PyTorch 모델의 Input Size">
+                    </div>
+                    <button type="submit" class="btn btn-success">모델 저장</button>
                 </div>
-                <!-- 모델 목록 표시 -->
-                <div class="mb-3">
-                    <label for="modelListDropdown" class="form-label">모델 목록</label>
-                    <select class="form-select" id="modelListDropdown" name="model_selected" disabled>
-                        <option value="">모델 타입을 먼저 선택하세요</option>
-                    </select>
-                </div>
-                <!-- 모델 이름 입력 -->
-                <div class="mb-3">
-                    <label for="modelName" class="form-label">모델 이름 입력</label>
-                    <input type="text" class="form-control" id="modelName" name="model_name" placeholder="모델 이름">
-                </div>
-                <!-- PyTorch 모델의 경우 input_size 입력 필드 추가 -->
-                <div class="mb-3" id="inputSizeField" style="display: none;">
-                    <label for="inputSize" class="form-label">Input Size</label>
-                    <input type="number" class="form-control" id="inputSize" placeholder="PyTorch 모델의 Input Size">
-                </div>
-                <button type="submit" class="btn btn-success">모델 저장</button>
-            </form>
-            <!-- 모델 업로드 폼 -->
-        <h4>모델 업로드</h4>
+            </div>
+        </form>
+    </div>
+
+    <div class="row g-4 my-1">
+        <!-- 모델 업로드 폼 -->
         <form id="uploadModelForm" enctype="multipart/form-data">
-            <div class="mb-3">
-                <label for="uploadedModel" class="form-label">모델 파일 업로드</label>
-                <input type="file" class="form-control" id="uploadedModel" name="model_file" accept=".pkl,.pt,.h5">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">모델 생성</h5>
+                    <div class="mb-3">
+                        <label for="uploadedModel" class="form-label">모델 파일 업로드</label>
+                        <input type="file" class="form-control" id="uploadedModel" name="model_file"
+                               accept=".pkl,.pt,.h5">
+                    </div>
+                    <div class="mb-3">
+                        <label for="uploadedModelName" class="form-label">모델 이름 입력</label>
+                        <input type="text" class="form-control" id="uploadedModelName" name="model_name"
+                               placeholder="모델 이름">
+                    </div>
+                    <button type="submit" class="btn btn-primary">모델 업로드</button>
+                </div>
             </div>
-            <div class="mb-3">
-                <label for="uploadedModelName" class="form-label">모델 이름 입력</label>
-                <input type="text" class="form-control" id="uploadedModelName" name="model_name" placeholder="모델 이름">
-            </div>
-            <button type="submit" class="btn btn-primary">모델 업로드</button>
         </form>
         <hr>
-            <hr>
-            <!-- 저장된 모델 목록 -->
-            <h5>저장된 모델 목록</h5>
-            <ul id="modelList" class="list-group"></ul>
-        </div>
+        <hr>
     </div>
-    <!-- Bootstrap JS 및 커스텀 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- JavaScript 파일을 body 끝부분에 포함 -->
-    <script src="js/main.js"></script>
+    <!-- 저장된 모델 목록 -->
+    <h5>저장된 모델 목록</h5>
+    <ul id="modelList" class="list-group"></ul>
+
+</div>
+<!-- Bootstrap JS 및 커스텀 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- JavaScript 파일을 body 끝부분에 포함 -->
+<script src="js/main.js"></script>
 </body>
 </html>
