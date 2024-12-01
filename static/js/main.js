@@ -145,6 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 fetchJSON('/api/upload_csv', { method: 'POST', body: formData }, data => {
                     if (data.status === 'success') {
                         uploadedFilename = data.filename;
+                        localStorage.setItem('uploadedFilename', uploadedFilename); // 파일 이름 저장
                         alert(data.message);
                         loadCSVPreview(data.filename);
                     } else {
@@ -170,6 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             loadButton.classList.add('btn', 'btn-sm', 'btn-primary');
                             loadButton.addEventListener('click', function() {
                                 uploadedFilename = file;
+                                localStorage.setItem('uploadedFilename', uploadedFilename); // 파일 이름 저장
                                 loadCSVPreview(file);
                                 alert(`${file} 파일을 불러왔습니다.`);
                                 loadFileModal.hide();
