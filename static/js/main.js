@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const trainingForm = document.getElementById('trainingForm');
     const modelForm = document.getElementById('modelForm');
     const uploadModelForm = document.getElementById('uploadModelForm');
+    const loadFileModalElemet = document.getElementById('loadFileModal');
+    const loadFileModal = new bootstrap.Modal(loadFileModalElemet);
     
     // 공통 함수 정의
     function fetchJSON(url, options = {}, callback) {
@@ -167,14 +169,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                 uploadedFilename = file;
                                 loadCSVPreview(file);
                                 alert(`${file} 파일을 불러왔습니다.`);
+                                loadFileModal.hide();
                             });
 
                             listItem.appendChild(loadButton);
                             serverFileList.appendChild(listItem);
                         });
 
-                        const modal = new bootstrap.Modal(document.getElementById('loadFileModal'));
-                        modal.show();
+                        loadFileModal.show();
                     }
                 });
             });
