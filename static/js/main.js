@@ -15,8 +15,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const trainingForm = document.getElementById('trainingForm');
     const modelForm = document.getElementById('modelForm');
     const uploadModelForm = document.getElementById('uploadModelForm');
-    const loadFileModalElemet = document.getElementById('loadFileModal');
-    const loadFileModal = new bootstrap.Modal(loadFileModalElemet);
+    const loadFileModalElement = document.getElementById('loadFileModal');
+    let loadFileModal;
+    if (loadFileModalElement) {
+        loadFileModal = new bootstrap.Modal(loadFileModalElement);
+    }
 
     // 공통 함수 정의
     function fetchJSON(url, options = {}, callback) {
@@ -468,4 +471,3 @@ document.addEventListener('DOMContentLoaded', function() {
         loadOptions();
     }
 });
-
