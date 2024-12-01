@@ -92,7 +92,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 await trainModel(csvFilename, modelName, targetColumn, valRatio);
             }
             alert('모든 모델의 학습이 완료되었습니다.');
-        })();
+        }
+    
+    )();
     });
 
     // 모델 학습 함수

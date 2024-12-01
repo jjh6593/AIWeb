@@ -2,10 +2,20 @@ from flask import Flask, request, jsonify, send_from_directory, render_template
 import os
 import pandas as pd
 import json
-from model import create_model
+from model import create_model, MLP
+from data_preprocessing import MinMaxScaling
 import joblib
 from data_utils import load_data, save_data, preprocess_data, get_columns, get_data_preview
+# 전역에서 PyTorch와 관련 모듈 임포트
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
+from sklearn.model_selection import train_test_split
+
+from sklearn.metrics import mean_squared_error
+from train import train_pytorch_model, train_sklearn_model
+
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
 from flask_cors import CORS
 
@@ -280,19 +290,41 @@ def train_model():
     with open(metadata_path, 'r', encoding='utf-8') as f:
         model_info = json.load(f)
 
-    # 모델 로드
+    # 모델 정보로드
     model_path = model_info.get('model_path')
     framework = model_info.get('framework')
+    model_selected = model_info.get('model_selected')
+    input_size = model_info.get('input_size')
+    
 
-    if not model_path or not framework:
+    if not model_path or not framework or not model_selected or not input_size:
         return jsonify({'status': 'error', 'message': '모델 정보가 잘못되었습니다.'}), 500
 
+    
     if framework == 'pytorch':
         # PyTorch 모델 로드
-        from model import create_model  # 모델 생성 함수
         input_size = model_info.get('input_size')
         model_selected = model_info.get('model_selected')
-        model = create_model(model_selected, input_size)
+        try:
+                # JSON 파일에서 모델 설정 값 가져오기
+            model_selected = model_info.get('model_selected')
+            input_size = model_info.get('input_size')
+            parameters = model_info.get('parameters', {})  # 모델 파라미터 정보
+            # MLP 모델 초기화
+            if model_selected.startswith('MLP'):
+                hidden_size = parameters.get('hidden_size', 32)  # 기본값: 32
+                n_layers = parameters.get('n_layers', 1)        # 기본값: 1
+                output_size = parameters.get('output_size', 1)  # 기본값: 1
+
+                # MLP 클래스 사용하여 모델 생성
+                model = MLP(input_size=input_size, hidden_size=hidden_size, n_layers=n_layers, output_size=output_size)
+            
+            else:
+                return jsonify({'status': 'error', 'message': f'알 수 없는 모델 유형: {model_selected}'}), 500
+            
+            # model = torch.load(model_path)  # 모델 구조 + 가중치 로드
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': f'PyTorch 모델 로드 중 오류 발생: {str(e)}'}), 500
         model_state = torch.load(model_path)
         model.load_state_dict(model_state)
     elif framework == 'sklearn':
@@ -307,7 +339,7 @@ def train_model():
 
     # 데이터 분할
     if val_ratio > 0:
-        from sklearn.model_selection import train_test_split
+        
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=val_ratio, random_state=42)
     else:
         X_train = X
@@ -317,11 +349,6 @@ def train_model():
 
     # 모델 학습
     if framework == 'pytorch':
-        # PyTorch 모델 학습
-        import torch
-        import torch.nn as nn
-        import torch.optim as optim
-        from torch.utils.data import TensorDataset, DataLoader
 
         # 데이터셋 및 데이터로더 생성
         X_train_tensor = torch.tensor(X_train.values, dtype=torch.float32)
@@ -344,9 +371,9 @@ def train_model():
         # 얼리 스탑핑 적용 (early_stopping.py에서 EarlyStopping 클래스 가져오기)
         from early_stopping import EarlyStopping  # 별도의 파일에 구현된 얼리 스탑핑 클래스
 
-        early_stopping = EarlyStopping(patience=5, verbose=False, path=os.path.join(model_dir, 'checkpoint.pt'))
+        early_stopping = EarlyStopping(patience=10, verbose=False, path=os.path.join(model_dir, 'checkpoint.pt'))
 
-        num_epochs = 100
+        num_epochs = 500
         for epoch in range(num_epochs):
             model.train()
             train_loss = 0.0
@@ -386,7 +413,6 @@ def train_model():
 
     elif framework == 'sklearn':
         # scikit-learn 모델 학습
-        from sklearn.metrics import mean_squared_error
         model.fit(X_train, y_train)
 
         train_predictions = model.predict(X_train)
@@ -412,23 +438,6 @@ def train_model():
     }
 
     return jsonify({'status': 'success', 'message': f'모델 {model_name} 학습 완료', 'result': result})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

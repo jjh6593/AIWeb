@@ -1,0 +1,9 @@
+{
+    "model_type": "scikit",
+    "model_name": "decision_tree",
+    "model_selected": "DecisionTreeRegressor",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models/decision_tree/decision_tree.pkl",
+    "input_size": null
+}

@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const trainingForm = document.getElementById('trainingForm');
     const modelForm = document.getElementById('modelForm');
     const uploadModelForm = document.getElementById('uploadModelForm');
-
+    
     // 공통 함수 정의
     function fetchJSON(url, options = {}, callback) {
         fetch(url, options)
@@ -466,3 +466,15 @@ document.addEventListener('DOMContentLoaded', function() {
         loadOptions();
     }
 });
+// "다음" 버튼 클릭 시 모델 생성 페이지로 이동
+const submitSettingsButton = document.getElementById("submitSettings");
+
+if (submitSettingsButton) {
+    submitSettingsButton.addEventListener("click", function (event) {
+        // 폼 제출 이벤트 방지
+        event.preventDefault();
+
+        // 단순히 페이지 이동
+        window.location.href = "model_creation.html";
+    });
+}
