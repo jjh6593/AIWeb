@@ -1,0 +1,9 @@
+{
+    "model_type": "pytorch",
+    "model_name": "mlp222",
+    "model_selected": "MLP_2",
+    "parameters": {},
+    "framework": "pytorch",
+    "model_path": "models/mlp222/mlp222.pt",
+    "input_size": 15
+}

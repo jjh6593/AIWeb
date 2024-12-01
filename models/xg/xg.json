@@ -1,0 +1,9 @@
+{
+    "model_type": "scikit",
+    "model_name": "xg",
+    "model_selected": "XGBoost",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models/xg/xg.pkl",
+    "input_size": null
+}

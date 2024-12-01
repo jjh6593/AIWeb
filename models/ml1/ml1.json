@@ -1,0 +1,9 @@
+{
+    "model_type": "pytorch",
+    "model_name": "ml1",
+    "model_selected": "MLP_1",
+    "parameters": {},
+    "framework": "pytorch",
+    "model_path": "models/ml1/ml1.pt",
+    "input_size": 14
+}

@@ -1,9 +1,0 @@
-{
-    "model_type": "scikit",
-    "model_name": "logistic",
-    "model_selected": "LinearRegressor",
-    "parameters": {},
-    "framework": "sklearn",
-    "model_path": "models/logistic/logistic.pkl",
-    "input_size": null
-}

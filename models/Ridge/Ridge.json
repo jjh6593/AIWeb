@@ -1,0 +1,9 @@
+{
+    "model_type": "scikit",
+    "model_name": "Ridge",
+    "model_selected": "Ridge",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models/Ridge/Ridge.pkl",
+    "input_size": null
+}

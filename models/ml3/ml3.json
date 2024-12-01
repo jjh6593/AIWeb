@@ -1,0 +1,9 @@
+{
+    "model_type": "pytorch",
+    "model_name": "ml3",
+    "model_selected": "MLP_3",
+    "parameters": {},
+    "framework": "pytorch",
+    "model_path": "models/ml3/ml3.pt",
+    "input_size": 15
+}
