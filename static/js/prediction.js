@@ -1,4 +1,4 @@
-// document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", function () {
     const options = {
         global: {
             Single: ['Beam', 'Stochastic', 'Best One'],
@@ -83,7 +83,7 @@
                 const colWrapper = document.createElement('div'); // Wrapper (Column)
                 colWrapper.className = 'col-md-3 mb-3'; // Grid 레이아웃
                 row.appendChild(colWrapper); // Row에 추가
-
+                
                 const label = document.createElement('label');
                 label.textContent = `${col} / ${col}_unit`;
                 label.className = 'form-label fw-bold';
@@ -236,11 +236,12 @@
                     { value: 'false', label: 'False' }
                 ]);
                 break;
-            case 'Brute Force':
+            case 'Exhaustive':
                 createInputField('Top K', 'topK', 'topK');
-                createRadioButtonGroup('partialKeep', [
-                    { value: 'true', label: 'True' },
-                    { value: 'false', label: 'False' }
+                 createRadioButtonGroup('alternative', [
+                    { value: 'up_down', label: 'up_down' },
+                    { value: 'keep_move', label: 'keep_move' },
+                    { value: 'keep_up_down', label: 'keep_up_down'}
                 ]);
                 break;
             case 'Manual':
@@ -354,7 +355,9 @@
     // 추가된 코드 끝 ------------------------------------------------------------------
 
     // 아래 코드 추가 ------------------------------------------------------------------
-
+        // 디버깅을 위해 saveName 값을 콘솔에 출력
+    const saveNameInput = document.getElementById('saveName');
+    console.log("Save Name Value: ", saveNameInput.value);
     // 폼 제출 이벤트 처리
     predictionForm.addEventListener('submit', function (event) {
         event.preventDefault(); // 폼의 기본 동작 막기
@@ -366,6 +369,7 @@
         data.filename = uploadedFilename;
 
         // 사용자가 입력한 Desire
+        data.save_name = saveNameInput.value,
         data.desire = document.getElementById('desire').value;
 
         // Option 값 (Global 또는 Local)
@@ -417,9 +421,9 @@
             }
         } else if (data.option === 'local') {
             switch (data.strategy) {
-                case 'Brute Force':
+                case 'Exhaustive':
                     data.top_k = document.getElementById('topK').value;
-                    data.partial_keep = document.querySelector('input[name="partialKeep"]:checked')?.value;
+                    data.alternative = document.querySelector('input[name="alternative"]:checked')?.value;
                     break;
                 case 'Manual':
                     data.index = document.getElementById('index').value;
@@ -479,9 +483,9 @@
               'Best Prediction: ' + data.best_pred);
 
         // 필요한 경우 로컬 스토리지나 세션 스토리지에 결과를 저장하고, 결과 페이지로 이동할 수 있습니다.
-        localStorage.setItem('predictionResult', JSON.stringify(data));
+        localStorage.setItem('trainingResult', JSON.stringify(data));
 
         // 결과 페이지로 이동 (예시)
-        window.location.href = '/prediction_result.html';
+        window.location.href = '/static/training_results.html'; // 올바른 경로로 수정
     }
-// });
+});

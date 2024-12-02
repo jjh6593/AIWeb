@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>입력값 예측 - AIWEB</title>
+    <title>입력값 탐색 - AIWEB</title>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <!-- 커스텀 CSS -->
@@ -19,12 +19,17 @@
 
 <!-- 메인 콘텐츠 -->
 <div class="container my-4">
-    <h3 class="mb-4 text-center">입력값 예측</h3>
+    <h3 class="mb-4 text-center">입력값 탐색</h3>
     <div class="row g-4">
         <form id="predictionForm">
             <div class="card h-100 shadow-sm">
                 <div class="card-body">
-                    <h5 class="card-title">입력값 예측</h5>
+                    <h5 class="card-title">입력값 탐색</h5>
+                    <div class="mb-3">
+                        <label for="saveName">Save Name</label>
+                        <input type="text" name="saveName" id="saveName" class="form-control" placeholder="Enter unique save name">
+                    </div>
+                    
                     <!-- 모델 타입 선택 -->
                     <div class="mb-3">
                         <label for="desire">Desire (float)</label>

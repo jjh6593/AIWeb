@@ -12,26 +12,77 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
-
+import time
 from sklearn.metrics import mean_squared_error
 from train import train_pytorch_model, train_sklearn_model
-
+import logging
+from traking import run
+# 디버깅 로깅 설정
+logging.basicConfig(level=logging.DEBUG)
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
 from flask_cors import CORS
-
+import numpy as np
 app = Flask(__name__)
 
 CORS(app)
 # 업로드 및 모델 저장 디렉토리 설정
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+OUTPUTS_FOLDER = 'outputs'
 
 MODEL_FOLDER = 'models'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
+os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
 
+def debug_training_results():
+    results = []
 
+    if not os.path.exists(OUTPUTS_FOLDER):
+        print(f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다.")
+        return {'status': 'error', 'message': f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다."}
+
+    print(f"'{OUTPUTS_FOLDER}' 폴더를 탐색합니다...")
+    for folder_name in os.listdir(OUTPUTS_FOLDER):
+        folder_path = os.path.join(OUTPUTS_FOLDER, folder_name)
+        output_file_path = os.path.join(folder_path, f"{folder_name}_output.json")
+
+        if os.path.exists(output_file_path):
+            print(f"파일 발견: {output_file_path}")
+            try:
+                with open(output_file_path, 'r', encoding='utf-8') as f:
+                    output_data = json.load(f)
+                    best_config = output_data.get('best_config')
+                    best_pred = output_data.get('best_pred')
+
+                    if best_config is not None and best_pred is not None:
+                        print(f"'{folder_name}'에서 읽은 데이터:")
+                        print(json.dumps({
+                            'folder_name': folder_name,
+                            'best_config': best_config,
+                            'best_pred': best_pred
+                        }, indent=4))
+
+                        results.append({
+                            'folder_name': folder_name,
+                            'best_config': best_config,
+                            'best_pred': best_pred
+                        })
+                    else:
+                        print(f"'{output_file_path}'에서 'best_config' 또는 'best_pred'가 없습니다.")
+            except Exception as e:
+                print(f"파일 읽기 실패: {output_file_path}, 오류: {e}")
+        else:
+            print(f"'{folder_path}' 폴더에 '{folder_name}_output.json' 파일이 없습니다.")
+
+    if not results:
+        print("결과가 없습니다.")
+    else:
+        print("최종 결과:")
+        print(json.dumps({'status': 'success', 'results': results}, indent=4))
+
+    return {'status': 'success', 'results': results}
 
 # 라우트 설정
 
@@ -484,128 +535,218 @@ def upload_model():
 
 
 '''--------------------------------------------------input_prediction----------------------------------------------------------------------------'''
+def convert_to_serializable(obj):
+    if obj is None:
+        return None  # None은 JSON에서 null로 직렬화됨
+    if isinstance(obj, (np.float32, np.float64)):  # numpy float 처리
+        return float(obj)
+    if isinstance(obj, (np.int32, np.int64)):  # numpy int 처리
+        return int(obj)
+    if isinstance(obj, list):  # 리스트 처리
+        return [convert_to_serializable(item) for item in obj]
+    if isinstance(obj, dict):  # 딕셔너리 처리
+        return {key: convert_to_serializable(value) for key, value in obj.items()}
+    return obj  # 변환이 필요 없는 경우 그대로 반환
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logging.error(f"An error occurred: {e}")
+    return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/submit_prediction', methods=['POST'])
 def submit_prediction():
     try:
-        # JSON 데이터 파싱
+        # 요청에서 JSON 데이터 가져오기
         data = request.get_json()
-        if not data:
-            return jsonify({'status': 'error', 'message': '데이터가 전송되지 않았습니다.'}), 400
+
+        # 터미널에 받은 데이터 출력
+        logging.debug("Received data:")
+        logging.debug(json.dumps(data, indent=4, ensure_ascii=False))
 
         # 필수 필드 확인
-        required_fields = ['filename', 'desire', 'option', 'modeling_type', 'strategy', 'starting_points', 'units', 'models']
+        required_fields = ['filename', 'desire', 'save_name', 'option', 'modeling_type', 'strategy', 'starting_points', 'units', 'models']
         for field in required_fields:
             if field not in data:
-                return jsonify({'status': 'error', 'message': f'{field} 필드가 필요합니다.'}), 400
+                logging.error(f"Missing field: {field}")
+                return jsonify({'status': 'error', 'message': f'필수 필드가 누락되었습니다: {field}'}), 400
 
-        filename = data['filename']
-        desire = data['desire']
-        option = data['option']
-        modeling_type = data['modeling_type']
+        # 'option' 필드 검증
+        if data['option'] not in ['local', 'global']:
+            logging.error("Invalid option value")
+            return jsonify({'status': 'error', 'message': '옵션 값이 올바르지 않습니다. "local" 또는 "global"이어야 합니다.'}), 400
+
+        # 'global' 옵션일 경우 추가 필드 확인
+        if data['option'] == 'global':
+            if 'tolerance' not in data:
+                logging.error("Missing tolerance field for global option")
+                return jsonify({'status': 'error', 'message': 'Global 옵션에서는 tolerance 필드가 필요합니다.'}), 400
+
+            if data['strategy'] == 'Beam' and 'beam_width' not in data:
+                logging.error("Missing beam_width field for Beam strategy")
+                return jsonify({'status': 'error', 'message': 'Beam 전략에서는 beam_width 필드가 필요합니다.'}), 400
+
+        required_keys = ['filename', 'desire', 'save_name', 'option', 'modeling_type', 'strategy']
+        for key in required_keys:
+            if key not in data or data[key] is None:
+                raise ValueError(f"Missing or invalid value for key: {key}")
+
+        # 데이터 타입 검증
+        try:
+            data['desire'] = float(data['desire'])
+        except ValueError:
+            logging.error("Invalid desire value: must be a float")
+            return jsonify({'status': 'error', 'message': 'desire 값은 실수여야 합니다.'}), 400
+
+        # 데이터 파일 로드
+        data_file_path = os.path.join('uploads', data['filename'])
+        if not os.path.exists(data_file_path):
+            logging.error(f"Data file not found: {data['filename']}")
+            return jsonify({'status': 'error', 'message': f'Data file not found: {data["filename"]}'}), 400
+
+        df = pd.read_csv(data_file_path).drop_duplicates()
+
+        model_list = ['MLP()', "ML_XGBoost()"]
+        #starting_point = data['starting_points']
+        models = None
+        mode = data['option']
+        desired = data['desire']
+        modeling = data['modeling_type']
         strategy = data['strategy']
-        starting_points = data['starting_points']  # 딕셔너리
-        units = data['units']                      # 딕셔너리
-        models = data['models']                    # 리스트
+        tolerance = data.get('tolerance', None)
+        beam_width = data.get('beam_width', None)
+        num_candidates = data.get('num_candidates', 5)
+        escape = data.get('escape', True)
+        top_k = data.get('top_k', 2)
+        index = data.get('index', 0)
+        up = data.get('up', 0)
+        alternative = data.get('alternative', 'keep_move')
+        
 
-        # 추가 정보 (옵션 및 전략에 따라)
-        tolerance = data.get('tolerance')
-        beam_width = data.get('beam_width')
-        num_candidates = data.get('num_candidates')
-        escape = data.get('escape')
-        top_k = data.get('top_k')
-        partial_keep = data.get('partial_keep')
-        index = data.get('index')
-        up = data.get('up')
+        # 파일 이름 생성
+        print(data['save_name'])
+        save_name = data['save_name']
+        outputs_dir = 'outputs'
+        os.makedirs(outputs_dir, exist_ok=True)
 
-        # CSV 파일 로드
-        csv_path = os.path.join(UPLOAD_FOLDER, filename)
-        if not os.path.exists(csv_path):
-            return jsonify({'status': 'error', 'message': f'파일 {filename}을 찾을 수 없습니다.'}), 404
+        # # 파일 경로 설정
+        # input_file_path = os.path.join(outputs_dir, f'{save_name}_input.json')
+        # output_file_path = os.path.join(outputs_dir, f'{save_name}_output.json')
+        # 파일 이름 및 경로 설정
+        save_name = data['save_name']
+        outputs_dir = 'outputs'
+        os.makedirs(outputs_dir, exist_ok=True)
 
-        df = pd.read_csv(csv_path)
+        # 서브 폴더 설정
+        subfolder_path = os.path.join(outputs_dir, save_name)
 
-        # 시작점 데이터를 모델 입력 형식에 맞게 변환
-        # 단위에 따른 데이터 처리는 여기서 하지 않습니다. 해당 구현은 다른 곳에서 정의될 예정입니다.
-        input_data = []
-        for col in df.columns:
-            if col in starting_points:
-                value = float(starting_points[col])
-                input_data.append(value)
-            elif col.lower() == 'target':
-                continue  # Target 컬럼은 입력 데이터에서 제외
-            else:
-                # 시작점에 없는 컬럼은 평균값으로 대체하거나 다른 처리 필요
-                value = df[col].mean()
-                input_data.append(value)
+        # 동일한 폴더가 있으면 그대로 사용
+        if not os.path.exists(subfolder_path):
+            os.makedirs(subfolder_path)
 
-        # 모델 로드 및 예측 수행
-        predictions = {}
-        for model_name in models:
-            model_dir = os.path.join(MODEL_FOLDER, model_name)
-            metadata_path = os.path.join(model_dir, f"{model_name}.json")
+        # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
+        input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
+        output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
+        # 동일한 파일명이 있을 경우 처리 (숫자 증가)
+        counter = 1
+        while os.path.exists(input_file_path) or os.path.exists(output_file_path):
+            input_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_input.json')
+            output_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_output.json')
+            counter += 1
 
-            if not os.path.exists(metadata_path):
-                return jsonify({'status': 'error', 'message': f"모델 메타데이터 '{metadata_path}'를 찾을 수 없습니다."}), 404
+        models, training_losses, configurations, predictions, best_config, best_pred = run(
+            data=df,  # DataFrame
+            models=models,
+            model_list=model_list,
+            desired=float(desired),  # 실수형으로 변환
+            starting_point=[float(value) for value in data['starting_points'].values()],  # 숫자 리스트로 변환
+            mode=mode,
+            modeling=modeling.lower(),
+            strategy=strategy.lower(),
+            tolerance=float(tolerance) if tolerance is not None else None,  # 실수형 변환
+            beam_width=int(beam_width) if beam_width is not None else None,
+            num_cadidates=int(num_candidates),
+            escape=bool(escape),
+            top_k=int(top_k),
+            index=int(index),
+            up=bool(up),
+            alternative=alternative
+        )
 
-            with open(metadata_path, 'r', encoding='utf-8') as f:
-                model_info = json.load(f)
+        output_data = {
+            'training_losses': convert_to_serializable(training_losses),
+            'configurations': convert_to_serializable(configurations),
+            'predictions': convert_to_serializable(predictions),
+            'best_config': convert_to_serializable(best_config),
+            'best_pred': convert_to_serializable(best_pred),
+        }
 
-            model_path = model_info.get('model_path')
-            framework = model_info.get('framework')
+        # 데이터 저장
+        with open(input_file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        with open(output_file_path, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=4)
 
-            # 모델 로드
-            if framework == 'sklearn':
-                model = joblib.load(model_path)
-                # 예측 수행
-                prediction = model.predict([input_data])[0]
-            elif framework == 'pytorch':
-                # 기존 코드에서 사용한 방법으로 PyTorch 모델 로드
-                input_size = model_info.get('input_size')
-                model_selected = model_info.get('model_selected')
-                parameters = model_info.get('parameters', {})
-
-                # MLP 모델 초기화 (기존 코드의 방식 사용)
-                if model_selected.startswith('MLP'):
-                    hidden_size = parameters.get('hidden_size', 32)
-                    n_layers = parameters.get('n_layers', 1)
-                    output_size = parameters.get('output_size', 1)
-
-                    model = MLP(input_size=input_size, hidden_size=hidden_size, n_layers=n_layers, output_size=output_size)
-                    model.load_state_dict(torch.load(model_path))
-                    model.eval()
-                    with torch.no_grad():
-                        input_tensor = torch.tensor([input_data], dtype=torch.float32)
-                        output = model(input_tensor)
-                        prediction = output.item()
-                else:
-                    return jsonify({'status': 'error', 'message': f"지원되지 않는 PyTorch 모델 유형입니다: {model_selected}"}), 400
-            else:
-                return jsonify({'status': 'error', 'message': f"지원되지 않는 모델 프레임워크입니다: {framework}"}), 400
-
-            predictions[model_name] = prediction
-
-        # 모델링 타입에 따라 결과 처리
-        if modeling_type == 'Single':
-            # 단일 모델의 예측 결과 반환
-            result = predictions[models[0]]  # 첫 번째 모델의 결과
-        elif modeling_type == 'Averaging':
-            # 예측 결과들의 평균 반환
-            result = sum(predictions.values()) / len(predictions)
-        elif modeling_type == 'Ensemble':
-            # 앙상블 방법 적용 (예: 다수결, 가중 평균 등)
-            # 여기서는 단순 평균을 사용
-            result = sum(predictions.values()) / len(predictions)
-        else:
-            return jsonify({'status': 'error', 'message': f'알 수 없는 모델링 타입: {modeling_type}'}), 400
-
-        # 옵션 및 전략에 따른 추가 처리
-        # 해당 부분은 구현 예정이므로 현재는 패스
-
-        # 최종 결과 반환
-        return jsonify({'status': 'success', 'result': result})
+        # 성공 응답
+        return jsonify({'status': 'success', 'data': output_data}), 200
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'예측 중 오류 발생: {str(e)}'}), 500
+        logging.error(f"An error occurred: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+
+'''---------------------------------------------학습 결과----------------------------------------------'''
+# 학습 결과 가져오기
+@app.route('/api/get_training_results', methods=['GET'])
+def get_training_results():
+    results = []
+
+    if not os.path.exists(OUTPUTS_FOLDER):
+        os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
+
+    for folder_name in os.listdir(OUTPUTS_FOLDER):
+        folder_path = os.path.join(OUTPUTS_FOLDER, folder_name)
+        print(folder_path)
+        output_file_path = os.path.join(folder_path, f"{folder_name}_output.json")
+        print(output_file_path)
+        if os.path.exists(output_file_path):
+            try:
+                with open(output_file_path, 'r', encoding='utf-8') as f:
+                    output_data = json.load(f)
+                    results.append({
+                        'folder_name': folder_name,
+                        'best_config': output_data.get('best_config'),
+                        'best_pred': output_data.get('best_pred'),
+                    })
+            except Exception as e:
+                print(f"Error reading {output_file_path}: {e}")
+                continue
+
+    return jsonify({'status': 'success', 'results': results})
+
+
+# 결과 삭제 엔드포인트
+@app.route('/api/delete_result', methods=['POST'])
+def delete_result():
+    data = request.get_json()
+    filename = data.get('filename')
+
+    if not filename:
+        return jsonify({'status': 'error', 'message': 'Filename is required.'}), 400
+
+    outputs_dir = 'outputs'
+    input_file_path = os.path.join(outputs_dir, f'{filename}_input.json')
+    output_file_path = os.path.join(outputs_dir, f'{filename}_output.json')
+
+    try:
+        if os.path.exists(input_file_path):
+            os.remove(input_file_path)
+        if os.path.exists(output_file_path):
+            os.remove(output_file_path)
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        logging.error(f"Error deleting files for {filename}: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
