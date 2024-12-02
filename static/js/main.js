@@ -13,8 +13,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveFilteredFileButton = document.getElementById('saveFilteredFile');
     const newFilenameInput = document.getElementById('newFilename');
     const trainingForm = document.getElementById('trainingForm');
-    const modelForm = document.getElementById('modelForm');
-    const uploadModelForm = document.getElementById('uploadModelForm');
     const loadFileModalElement = document.getElementById('loadFileModal');
     let loadFileModal;
     if (loadFileModalElement) {

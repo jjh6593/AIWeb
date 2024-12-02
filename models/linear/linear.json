@@ -1,9 +1,0 @@
-{
-    "model_type": "scikit",
-    "model_name": "linear",
-    "model_selected": "LinearRegressor",
-    "parameters": {},
-    "framework": "sklearn",
-    "model_path": "models/linear/linear.pkl",
-    "input_size": null
-}

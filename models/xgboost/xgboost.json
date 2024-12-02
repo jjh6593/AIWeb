@@ -1,0 +1,11 @@
+{
+    "model_type": "scikit",
+    "model_name": "xgboost",
+    "model_selected": "XGBoost",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models\\xgboost\\xgboost.pkl",
+    "input_size": null,
+    "train_loss": 0.00030209221799229485,
+    "val_loss": 0.004953908560997392
+}

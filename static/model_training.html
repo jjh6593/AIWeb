@@ -18,38 +18,13 @@
 <div id="navbar"></div>
 <!-- 메인 콘텐츠 -->
 <div class="container my-4">
-    <h3 class="mb-4 text-center">모델 학습</h3>
+    <h3 class="mb-4 text-center">모델 관리</h3>
     <div class="row g-4">
         <div class="card h-100 shadow-sm">
             <div class="card-body">
                 <!-- 모델 학습 폼 -->
-                <form id="trainingForm">
-                    <div class="mb-3">
-                        <label for="csvFileSelect" class="form-label">CSV 파일 선택</label>
-                        <select class="form-select" id="csvFileSelect" name="csv_filename"></select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="targetColumn" class="form-label">타겟 열 이름</label>
-                        <input type="text" class="form-control" id="targetColumn" name="target_column"
-                               placeholder="타겟 열 이름">
-                    </div>
-                    <div class="mb-3">
-                        <label for="valRatio" class="form-label">검증 데이터 비율 (0~1)</label>
-                        <input type="number" class="form-control" id="valRatio" name="val_ratio" min="0" max="1"
-                               step="0.1"
-                               value="0.2">
-                    </div>
-                    <div class="mb-3">
-                        <label for="modelSelect" class="form-label">저장된 모델 선택</label>
-                        <div class="input-group">
-                            <select class="form-select" id="modelSelect" name="model_name"></select>
-                            <button type="button" id="addModelButton" class="btn btn-secondary">모델 추가</button>
-                        </div>
-                    </div>
-                    <h5 class="mt-4">선택된 모델 리스트</h5>
-                    <ul id="modelList" class="list-group mb-3"></ul>
-                    <button type="submit" class="btn btn-primary">학습 시작</button>
-                </form>
+                 <!-- 저장된 모델 목록 -->
+                <ul id="modelList" class="list-group"></ul>
                 <div id="trainingProgress" class="mt-1"></div>
             </div>
         </div>

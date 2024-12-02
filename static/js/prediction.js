@@ -6,9 +6,9 @@ document.addEventListener("DOMContentLoaded", function () {
             Ensemble: ['Beam', 'Stochastic', 'Best One']
         },
         local: {
-            Single: ['Brute Force', 'Manual', 'Sensitivity'],
-            Averaging: ['Brute Force', 'Manual', 'Sensitivity'],
-            Ensemble: ['Brute Force', 'Manual', 'Sensitivity']
+            Single: ['Exhaustive', 'Manual', 'Sensitivity'],
+            Averaging: ['Exhaustive', 'Manual', 'Sensitivity'],
+            Ensemble: ['Exhaustive', 'Manual', 'Sensitivity']
         }
     };
 

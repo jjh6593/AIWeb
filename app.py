@@ -26,63 +26,17 @@ app = Flask(__name__)
 
 CORS(app)
 # 업로드 및 모델 저장 디렉토리 설정
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-OUTPUTS_FOLDER = 'outputs'
 
+
+UPLOAD_FOLDER = 'uploads'
+OUTPUTS_FOLDER = 'outputs'
 MODEL_FOLDER = 'models'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
 os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
 
-def debug_training_results():
-    results = []
 
-    if not os.path.exists(OUTPUTS_FOLDER):
-        print(f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다.")
-        return {'status': 'error', 'message': f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다."}
-
-    print(f"'{OUTPUTS_FOLDER}' 폴더를 탐색합니다...")
-    for folder_name in os.listdir(OUTPUTS_FOLDER):
-        folder_path = os.path.join(OUTPUTS_FOLDER, folder_name)
-        output_file_path = os.path.join(folder_path, f"{folder_name}_output.json")
-
-        if os.path.exists(output_file_path):
-            print(f"파일 발견: {output_file_path}")
-            try:
-                with open(output_file_path, 'r', encoding='utf-8') as f:
-                    output_data = json.load(f)
-                    best_config = output_data.get('best_config')
-                    best_pred = output_data.get('best_pred')
-
-                    if best_config is not None and best_pred is not None:
-                        print(f"'{folder_name}'에서 읽은 데이터:")
-                        print(json.dumps({
-                            'folder_name': folder_name,
-                            'best_config': best_config,
-                            'best_pred': best_pred
-                        }, indent=4))
-
-                        results.append({
-                            'folder_name': folder_name,
-                            'best_config': best_config,
-                            'best_pred': best_pred
-                        })
-                    else:
-                        print(f"'{output_file_path}'에서 'best_config' 또는 'best_pred'가 없습니다.")
-            except Exception as e:
-                print(f"파일 읽기 실패: {output_file_path}, 오류: {e}")
-        else:
-            print(f"'{folder_path}' 폴더에 '{folder_name}_output.json' 파일이 없습니다.")
-
-    if not results:
-        print("결과가 없습니다.")
-    else:
-        print("최종 결과:")
-        print(json.dumps({'status': 'success', 'results': results}, indent=4))
-
-    return {'status': 'success', 'results': results}
 
 # 라우트 설정
 
@@ -305,6 +259,8 @@ def get_models():
                         'framework': metadata.get('framework'),
                         'model_selected': metadata.get('model_selected'),
                         'input_size': metadata.get('input_size'),
+                        'train_loss': metadata.get('train_loss'),
+                        'val_loss': metadata.get('val_loss')
                     })
             except Exception as e:
                 print(f"모델 메타데이터 로드 오류: {str(e)}")
@@ -484,6 +440,22 @@ def train_model():
             torch.save(model.state_dict(), model_path)
     except Exception as e:
         return jsonify({'status': 'error', 'message': f"모델 학습 중 오류 발생: {str(e)}"}), 500
+    # JSON 파일 업데이트
+    try:
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+
+        # train_loss, val_loss 값을 업데이트
+        metadata['train_loss'] = train_loss
+        metadata['val_loss'] = val_loss if val_loss is not None else "N/A"
+
+        # 업데이트된 메타데이터 저장
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=4)
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f"JSON 파일 업데이트 오류: {str(e)}"}), 500
+
     # Denormalize된 값 계산
     denormalized_train_loss = scaler.denormalize([train_loss], [target_column])[0]
     denormalized_val_loss = scaler.denormalize([val_loss], [target_column])[0] if val_loss else None
@@ -532,9 +504,105 @@ def upload_model():
         json.dump(model_info, f, ensure_ascii=False, indent=4)
 
     return jsonify({'status': 'success', 'message': f'모델 {model_name}이(가) 업로드되었습니다.'})
+def debug_training_results():
+    results = []
 
+    if not os.path.exists(OUTPUTS_FOLDER):
+        print(f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다.")
+        return {'status': 'error', 'message': f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다."}
 
+    print(f"'{OUTPUTS_FOLDER}' 폴더를 탐색합니다...")
+    for folder_name in os.listdir(OUTPUTS_FOLDER):
+        folder_path = os.path.join(OUTPUTS_FOLDER, folder_name)
+        output_file_path = os.path.join(folder_path, f"{folder_name}_output.json")
+
+        if os.path.exists(output_file_path):
+            print(f"파일 발견: {output_file_path}")
+            try:
+                with open(output_file_path, 'r', encoding='utf-8') as f:
+                    output_data = json.load(f)
+                    best_config = output_data.get('best_config')
+                    best_pred = output_data.get('best_pred')
+
+                    if best_config is not None and best_pred is not None:
+                        print(f"'{folder_name}'에서 읽은 데이터:")
+                        print(json.dumps({
+                            'folder_name': folder_name,
+                            'best_config': best_config,
+                            'best_pred': best_pred
+                        }, indent=4))
+
+                        results.append({
+                            'folder_name': folder_name,
+                            'best_config': best_config,
+                            'best_pred': best_pred
+                        })
+                    else:
+                        print(f"'{output_file_path}'에서 'best_config' 또는 'best_pred'가 없습니다.")
+            except Exception as e:
+                print(f"파일 읽기 실패: {output_file_path}, 오류: {e}")
+        else:
+            print(f"'{folder_path}' 폴더에 '{folder_name}_output.json' 파일이 없습니다.")
+
+    if not results:
+        print("결과가 없습니다.")
+    else:
+        print("최종 결과:")
+        print(json.dumps({'status': 'success', 'results': results}, indent=4))
+
+    return {'status': 'success', 'results': results}
 '''--------------------------------------------------input_prediction----------------------------------------------------------------------------'''
+def process_models(models_input):
+    # 매핑 사전 정의
+    mapping = {
+        'MLP_1': 'MLP()',
+        'MLP_2': 'MLP(n_layers = 2)',
+        'MLP_3': 'MLP(n_layers = 3)',
+        'LinearRegressor': 'ML_LinearRegressor()',
+        'Ridge': 'ML_Ridge()',
+        'Lasso': 'ML_Lasso()',
+        'ElasticNet': 'ML_ElasticNet()',
+        'DecisionTreeRegressor': 'ML_DecisionTreeRegressor()',
+        'RandomForestRegressor': 'ML_RandomForestRegressor()',
+        'GradientBoostingRegressor': 'ML_GradientBoostingRegressor()',
+        'SVR': 'ML_SVR()',
+        'KNeighborsRegressor': 'ML_KNeighborsRegressor()',
+        'HuberRegressor': 'ML_HuberRegressor()',
+        'GaussianProcessRegressor': 'ML_GaussianProcessRegressor()',
+        'XGBoost': 'ML_XGBoost()'
+    }
+
+    # 매핑된 모델 리스트 초기화
+    mapped_models = []
+
+    # 모델 처리 시작
+    for model_name in models_input:
+        # 모델 저장 경로 설정
+        save_dir = os.path.join(MODEL_FOLDER, model_name)
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 메타데이터 파일 경로
+        metadata_path = os.path.join(save_dir, f"{model_name}.json")
+        if not os.path.exists(metadata_path):
+            print(f"Metadata for model {model_name} not found. Skipping...")
+            continue
+
+        try:
+            # 메타데이터 로드
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+
+            # model_selected 값 가져오기
+            model_selected = metadata.get('model_selected')
+            if model_selected and model_selected in mapping:
+                # 매핑 결과 추가
+                mapped_models.append(mapping[model_selected])
+            else:
+                print(f"No valid mapping for model_selected: {model_selected}. Skipping...")
+        except Exception as e:
+            print(f"Error processing model {model_name}: {e}")
+
+    return mapped_models
 def convert_to_serializable(obj):
     if obj is None:
         return None  # None은 JSON에서 null로 직렬화됨
@@ -558,6 +626,7 @@ def submit_prediction():
     try:
         # 요청에서 JSON 데이터 가져오기
         data = request.get_json()
+        
 
         # 터미널에 받은 데이터 출력
         logging.debug("Received data:")
@@ -604,14 +673,18 @@ def submit_prediction():
             return jsonify({'status': 'error', 'message': f'Data file not found: {data["filename"]}'}), 400
 
         df = pd.read_csv(data_file_path).drop_duplicates()
-
-        model_list = ['MLP()', "ML_XGBoost()"]
+        model_list = process_models(data['models'])
+        # model_list = ['MLP()', "ML_XGBoost()"]
         #starting_point = data['starting_points']
         models = None
         mode = data['option']
+        print(mode)
         desired = data['desire']
+        print(desired)
         modeling = data['modeling_type']
+        print(modeling)
         strategy = data['strategy']
+        print(strategy)
         tolerance = data.get('tolerance', None)
         beam_width = data.get('beam_width', None)
         num_candidates = data.get('num_candidates', 5)
@@ -646,12 +719,13 @@ def submit_prediction():
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
-        # 동일한 파일명이 있을 경우 처리 (숫자 증가)
-        counter = 1
-        while os.path.exists(input_file_path) or os.path.exists(output_file_path):
-            input_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_input.json')
-            output_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_output.json')
-            counter += 1
+        # # 동일한 파일명이 있을 경우 처리 (숫자 증가)
+        # counter = 1
+
+        # while os.path.exists(input_file_path) or os.path.exists(output_file_path):
+        #     input_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_input.json')
+        #     output_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_output.json')
+        #     counter += 1
 
         models, training_losses, configurations, predictions, best_config, best_pred = run(
             data=df,  # DataFrame
@@ -714,6 +788,8 @@ def get_training_results():
                     output_data = json.load(f)
                     results.append({
                         'folder_name': folder_name,
+                        'prediction' : output_data.get('prediction'),
+                        'configurations': output_data.get('configurations'),
                         'best_config': output_data.get('best_config'),
                         'best_pred': output_data.get('best_pred'),
                     })

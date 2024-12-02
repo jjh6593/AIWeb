@@ -1,0 +1,11 @@
+{
+    "model_type": "scikit",
+    "model_name": "ridgeee",
+    "model_selected": "DecisionTreeRegressor",
+    "parameters": {},
+    "framework": "sklearn",
+    "model_path": "models\\ridgeee\\ridgeee.pkl",
+    "input_size": null,
+    "train_loss": 0.0046299245658008945,
+    "val_loss": 0.033724322608419316
+}
