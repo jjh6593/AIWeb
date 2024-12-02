@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", function () {
+// document.addEventListener("DOMContentLoaded", function () {
     const options = {
         global: {
             Single: ['Beam', 'Stochastic', 'Best One'],
@@ -449,6 +449,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 // 성공 시 처리 로직
                 alert('예측이 완료되었습니다.');
                 // 필요에 따라 다음 단계로 이동하거나 결과를 표시
+                // 결과 표시
+                handlePredictionResult(result.data);
             } else {
                 alert('에러: ' + result.message);
             }
@@ -459,5 +461,27 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     // 아래 코드 추가 끝 ---------------------------------------------------------------
+    // 서버로부터 받은 결과를 처리하는 함수 추가
+    function handlePredictionResult(data) {
+        // 서버로부터 받은 데이터 구조
+        // data = {
+        //     configurations: [...],
+        //     predictions: [...],
+        //     best_config: [...],
+        //     best_pred: ...
+        // }
 
-});
+        // 결과를 표시하거나 처리하는 로직을 여기에 작성합니다.
+        // 예를 들어, 결과를 새로운 페이지로 이동하거나, 현재 페이지에 결과를 표시할 수 있습니다.
+
+        // 여기서는 결과를 alert로 간단히 표시해보겠습니다.
+        alert('예측이 완료되었습니다.\n' +
+              'Best Prediction: ' + data.best_pred);
+
+        // 필요한 경우 로컬 스토리지나 세션 스토리지에 결과를 저장하고, 결과 페이지로 이동할 수 있습니다.
+        localStorage.setItem('predictionResult', JSON.stringify(data));
+
+        // 결과 페이지로 이동 (예시)
+        window.location.href = '/prediction_result.html';
+    }
+// });

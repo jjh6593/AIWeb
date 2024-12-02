@@ -6,9 +6,13 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log("nextButton 이벤트 등록");
         nextButton.addEventListener("click", function (event) {
             event.preventDefault();
+            
             // 현재 페이지 URL에서 파일 이름 추출
             const currentPage = window.location.pathname.split("/").pop();
-
+            // 루트 경로 ('/')를 index.html로 간주
+            if (!currentPage || currentPage === "") {
+                currentPage = "index.html";
+            }
             // 페이지 인덱스 계산
             const currentIndex = pageSequence.indexOf(currentPage);
 
