@@ -756,7 +756,6 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
         if strategy == 'beam':
             configurations, predictions, best_config, best_pred = G.beam(starting_point = starting_point,
                                                                  beam_width = beam_width)
-            
         elif strategy == 'stochastic':
             configurations, predictions, best_config, best_pred = G.stochastic(starting_point = starting_point,
                                                                  num_candidates = num_cadidates)

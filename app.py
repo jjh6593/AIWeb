@@ -17,6 +17,7 @@ from sklearn.metrics import mean_squared_error
 from train import train_pytorch_model, train_sklearn_model
 import logging
 from traking import run
+import shutil
 # 디버깅 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
@@ -779,16 +780,16 @@ def get_training_results():
 
     for folder_name in os.listdir(OUTPUTS_FOLDER):
         folder_path = os.path.join(OUTPUTS_FOLDER, folder_name)
-        print(folder_path)
+        
         output_file_path = os.path.join(folder_path, f"{folder_name}_output.json")
-        print(output_file_path)
+        
         if os.path.exists(output_file_path):
             try:
                 with open(output_file_path, 'r', encoding='utf-8') as f:
                     output_data = json.load(f)
                     results.append({
-                        'folder_name': folder_name,
-                        'prediction' : output_data.get('prediction'),
+                        'folder_name': str(folder_name),
+                        'predictions' : output_data.get('predictions'),
                         'configurations': output_data.get('configurations'),
                         'best_config': output_data.get('best_config'),
                         'best_pred': output_data.get('best_pred'),
@@ -810,19 +811,26 @@ def delete_result():
         return jsonify({'status': 'error', 'message': 'Filename is required.'}), 400
 
     outputs_dir = 'outputs'
-    input_file_path = os.path.join(outputs_dir, f'{filename}_input.json')
-    output_file_path = os.path.join(outputs_dir, f'{filename}_output.json')
-
+    folder_path = os.path.join(outputs_dir, filename)
+    print(filename)
     try:
-        if os.path.exists(input_file_path):
-            os.remove(input_file_path)
-        if os.path.exists(output_file_path):
-            os.remove(output_file_path)
-        return jsonify({'status': 'success'}), 200
-    except Exception as e:
-        logging.error(f"Error deleting files for {filename}: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        # Ensure the folder_path is within the outputs_dir to prevent directory traversal attacks
+        outputs_dir_abs = os.path.abspath(outputs_dir)
+        folder_path_abs = os.path.abspath(folder_path)
+        if not folder_path_abs.startswith(outputs_dir_abs):
+            return jsonify({'status': 'error', 'message': 'Invalid filename.'}), 400
 
+        if os.path.exists(folder_path):
+            # Delete the directory and all its contents
+            shutil.rmtree(folder_path)
+            return jsonify({'status': 'success'}), 200
+        else:
+            return jsonify({'status': 'error', 'message': 'Folder does not exist.'}), 404
+
+    except Exception as e:
+        logging.error(f"Error deleting folder {folder_path}: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 
 if __name__ == '__main__':
     app.run(debug=True)
