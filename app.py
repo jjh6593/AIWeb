@@ -33,6 +33,10 @@ UPLOAD_FOLDER = 'uploads'
 OUTPUTS_FOLDER = 'outputs'
 MODEL_FOLDER = 'models'
 
+# Flask 설정에 디렉토리 경로 추가
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['OUTPUTS_FOLDER'] = OUTPUTS_FOLDER
+app.config['MODEL_FOLDER'] = MODEL_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
 os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
@@ -88,6 +92,7 @@ def get_csv_data():
 @app.route('/api/save_filtered_csv', methods=['POST'])
 def save_filtered_csv():
     data = request.json
+    print(f"Received data: {data}")  # 디버깅용
     exclude_columns = data.get('exclude_columns', [])
     new_filename = data.get('new_filename', '')
     filename = data.get('filename', '')  # JSON에서 filename 가져오기
@@ -99,6 +104,7 @@ def save_filtered_csv():
         return jsonify({'status': 'error', 'message': '원본 파일명이 필요합니다.'}), 400
 
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)  # current_app 대신 app 사용
+    print(f"File path: {file_path}")  # 디버깅용
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': '원본 파일을 찾을 수 없습니다.'}), 404
 
@@ -106,6 +112,7 @@ def save_filtered_csv():
     df = pd.read_csv(file_path)
     filtered_df = df.drop(columns=exclude_columns, errors='ignore')
     new_file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+    print(f"Saved filtered file to: {new_file_path}")
     filtered_df.to_csv(new_file_path, index=False)
 
     return jsonify({'status': 'success', 'message': f'필터링된 데이터가 {new_filename}로 저장되었습니다.'})
