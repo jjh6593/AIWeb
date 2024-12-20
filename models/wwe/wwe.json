@@ -1,0 +1,34 @@
+{
+    "model_type": "scikit",
+    "model_name": "wwe",
+    "model_selected": "Ridge",
+    "parameters": {
+        "alpha": 1,
+        "fit_intercept": true,
+        "solver": "auto"
+    },
+    "framework": "sklearn",
+    "model_path": "models/wwe/wwe.pkl",
+    "input_size": null,
+    "train_loss": 0.015633447361125676,
+    "val_loss": 0.01757281086620025,
+    "creation_time": "2024-12-19 18:32:00",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.015633447361125676,
+            "train_rmse": 0.12503378487883055,
+            "train_rae": 0.2944388863458259,
+            "val_mse": 0.01757281086620025,
+            "val_rmse": 0.13256247910400684,
+            "val_rae": 0.2669287884290356
+        },
+        "original": {
+            "train_mse": 267562.84025932546,
+            "train_rmse": 517.2647680437219,
+            "train_rae": 118.22262920876112,
+            "val_mse": 300754.59865570726,
+            "val_rmse": 548.4109760532764,
+            "val_rae": 27.836245062528977
+        }
+    }
+}

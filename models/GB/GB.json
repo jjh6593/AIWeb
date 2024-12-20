@@ -1,0 +1,38 @@
+{
+    "model_type": "scikit",
+    "model_name": "GB",
+    "model_selected": "GradientBoostingRegressor",
+    "parameters": {
+        "loss": "squared_error",
+        "learning_rate": 0.1,
+        "n_estimators": 100,
+        "subsample": 1,
+        "criterion": "friedman_mse",
+        "min_samples_split": 2,
+        "min_samples_leaf": 1
+    },
+    "framework": "sklearn",
+    "model_path": "models/GB/GB.pkl",
+    "input_size": null,
+    "train_loss": 0.00190226501347503,
+    "val_loss": 0.009021675155896827,
+    "creation_time": "2024-12-20 13:44:48",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.00190226501347503,
+            "train_rmse": 0.04361496318323598,
+            "train_rae": 125.18842370993548,
+            "val_mse": 0.009021675155896827,
+            "val_rmse": 0.09498249920852171,
+            "val_rae": 29.52706742340966
+        },
+        "original": {
+            "train_mse": 32556.82628240703,
+            "train_rmse": 180.43510268904726,
+            "train_rae": 125.18842370993549,
+            "val_mse": 154403.88628621318,
+            "val_rmse": 392.9425992256543,
+            "val_rae": 29.52706742340966
+        }
+    }
+}

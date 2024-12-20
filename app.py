@@ -1,8 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
-import os
+from flask import Flask, request, jsonify, send_from_directory, render_template, make_response
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+import os, datetime
 import pandas as pd
+import mimetypes
 import json
-from model import create_model, MLP
+from model import create_model
 from data_preprocessing import MinMaxScaling
 import joblib
 from data_utils import load_data, save_data, preprocess_data, get_columns, get_data_preview
@@ -25,9 +27,13 @@ from flask_cors import CORS
 import numpy as np
 app = Flask(__name__)
 
-CORS(app)
-# 업로드 및 모델 저장 디렉토리 설정
+# CORS(app)
+# 특정 Origin 허용
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5173/", "http://127.0.0.1:5173/"]}})
 
+# 업로드 및 모델 저장 디렉토리 설정
+mimetypes.init()
+mimetypes.add_type('application/javascript', '.js', strict=True)
 
 UPLOAD_FOLDER = 'uploads'
 OUTPUTS_FOLDER = 'outputs'
@@ -41,8 +47,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
 os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
 
-
-
 # 라우트 설정
 
 @app.route('/')
@@ -54,6 +58,16 @@ def serve_static_file(path):
     return send_from_directory('static', path)
 
 # API 엔드포인트
+@app.before_request
+def handle_options_request():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin"))
+        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        response.headers.add("Access-Control-Max-Age", "3600")
+        return response
+
 
 # 1 CSV 파일 업로드
 @app.route('/api/upload_csv', methods=['POST'])
@@ -138,68 +152,242 @@ def submit_data_settings():
 
     return jsonify({'status': 'success', 'message': '데이터 설정이 완료되었습니다.'})
 
-
+# # 6. 모델 생성
 @app.route('/api/save_model', methods=['POST'])
 def save_model():
+    
     data = request.json
+    if not data:
+        return jsonify({'status': 'error', 'message': 'JSON 데이터가 제공되지 않았습니다.'}), 400
+
+    # 디버깅용: 요청 데이터 출력
+    print(f"Received data: {data}")
     model_type = data.get('model_type')
     model_name = data.get('model_name')
     model_selected = data.get('model_selected')
     input_size = data.get('input_size', None)
-
-    if not model_type or not model_name or not model_selected:
-        return jsonify({'status': 'error', 'message': '모델 타입, 이름, 그리고 모델을 선택하세요.'}), 400
-
-    # 모델 생성
-    try:
-        model = create_model(model_selected, input_size)
-        if not model:
-            raise ValueError("모델 생성이 실패했습니다.")
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"모델 생성 중 오류 발생: {str(e)}"}), 500
-
-    # 모델 저장 경로 설정
+    csv_filename = data.get('csv_filename')
+    hyperparams = data.get('hyperparameters', {})
+    target_column = "Target"
+    
     save_dir = os.path.join(MODEL_FOLDER, model_name)
     os.makedirs(save_dir, exist_ok=True)
 
-    # 모델 정보 초기화
+    val_ratio = float(data.get('val_ratio', 0.2))
+    # 필수 필드 누락 확인
+    if not model_type or not model_name or not model_selected or not csv_filename or not target_column:
+        missing_fields = [field for field in ['model_type', 'model_name', 'model_selected', 'csv_filename', 'target_column'] if not data.get(field)]
+        print(f"Missing fields: {missing_fields}")
+        return jsonify({'status': 'error', 'message': f'필수 정보가 누락되었습니다: {missing_fields}'}), 400
+    
+    # 필수 데이터 확인
+    if not model_type or not model_name or not model_selected or not csv_filename or not target_column:
+        return jsonify({'status': 'error', 'message': '필요한 정보가 부족합니다.'}), 400
+    
+    # CSV 파일 로드
+    csv_path = os.path.join(UPLOAD_FOLDER, csv_filename)
+    if not os.path.exists(csv_path):
+        return jsonify({'status': 'error', 'message': f"CSV 파일 '{csv_filename}'을 찾을 수 없습니다."}), 404
+
+    try:
+        df = pd.read_csv(csv_path)
+        #print(f"CSV 데이터 미리보기: {df.head()}")  # 디버깅용
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f"CSV 파일 읽기 오류: {str(e)}"}), 500
+
+    # Target 컬럼 확인
+    if target_column not in df.columns:
+        return jsonify({'status': 'error', 'message': f"Target 컬럼 '{target_column}'이 CSV 파일에 존재하지 않습니다."}), 400
+
+    # 모델 생성 (초기 저장 X)
+    # try:
+    #     model = create_model(model_selected, input_size, hyperparams=hyperparams)
+    #     print(f"모델 생성 성공: {model}")  # 디버깅용
+    #     if not model:
+    #         raise ValueError("모델 생성 실패")
+    # except Exception as e:
+    #     return jsonify({"status": "error", "message": f"모델 생성 중 오류 발생: {str(e)}"}), 500
+    # 모델 생성 (초기 저장 X)
+    try:
+        # GradientBoostingRegressor 또는 RandomForestRegressor일 경우 외부에서 생성
+        if model_selected == 'RandomForestRegressor':
+            model = RandomForestRegressor(**hyperparams)
+            print(f"모델 생성 성공 (외부): {model}")
+        elif model_selected == 'GradientBoostingRegressor':
+            model = GradientBoostingRegressor(**hyperparams)
+            print(f"모델 생성 성공 (외부): {model}")
+        else:
+            # 그 외 모델은 기존 로직 유지
+            model = create_model(model_selected, input_size, hyperparams=hyperparams)
+            print(f"모델 생성 성공: {model}")  # 디버깅용
+            if not model:
+                raise ValueError("모델 생성 실패")
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"모델 생성 중 오류 발생: {str(e)}"}), 500
+
+    # 폴더 생성
+    
+    model_path = os.path.join(save_dir, f"{model_name}.pt" if isinstance(model, torch.nn.Module) else f"{model_name}.pkl")
+    metadata_path = os.path.join(save_dir, f"{model_name}.json")
+    creation_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 데이터 전처리
+    df = df.fillna(0)
+    # 여기서 X, y를 정의
+    X = df.drop(columns=[target_column])
+    y = df[target_column]
+
+    # 사이킷런 MinMaxScaler 사용
+    from sklearn.preprocessing import MinMaxScaler
+
+    scaler_X = MinMaxScaler()
+    scaler_y = MinMaxScaler()
+
+    # X와 y를 numpy 형태로 변환하여 fit_transform
+    X = X.to_numpy()  # DataFrame -> Numpy array
+    y = y.to_numpy().reshape(-1, 1)  # y를 2D array로
+    print(X.shape, y.shape)
+    # 스케일링 적용
+    X_scaled = scaler_X.fit_transform(X)
+    y_scaled = scaler_y.fit_transform(y).flatten()
+
+    # 데이터 분할
+    X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_scaled, test_size=val_ratio, random_state=42)
+
+    # feature, target을 np.array 또는 torch.tensor 형태로 변환
+    # Sklearn 모델: np.array 그대로 사용
+    # Pytorch 모델: tensor로 바꾸는 건 _train_nn 내부에서 할 수도 있음
+    X_train_np = X_train
+    y_train_np = y_train.reshape(-1,1)
+    X_val_np = X_val
+    y_val_np = y_val.reshape(-1,1)
+    print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
+    # 모델 학습
+    try:
+        #print("모델 학습 시작...")
+        if isinstance(model, torch.nn.Module):
+            training_losses = _train_nn(model, X_train_np, y_train_np)
+        else:
+            model.fit(X_train_np, y_train_np)  # 여기서 에러 발생 가능성 확인
+        #print("모델 학습 완료.")
+    except Exception as e:
+        print(f"모델 학습 중 오류 발생: {str(e)}")
+        return jsonify({"status": "error", "message": f"모델 학습 중 오류 발생: {str(e)}"}), 500
+
+
+   # 모델 저장
+    try:
+        print("모델 저장 시도...")
+        if isinstance(model, torch.nn.Module):
+            torch.save(model.state_dict(), model_path)
+        else:
+            joblib.dump(model, model_path)  # 여기서 에러 발생 시 추적
+        print("모델 저장 완료.")
+    except Exception as e:
+        print(f"모델 저장 중 오류 발생: {str(e)}")
+        return jsonify({"status": "error", "message": f"모델 저장 중 오류 발생: {str(e)}"}), 500
+
+
+    # Metrics 계산
+    def model_predict(model, X):
+        if isinstance(model, torch.nn.Module):
+            model.eval()
+            with torch.no_grad():
+                X_t = torch.tensor(X, dtype=torch.float32)
+                preds = model(X_t).numpy().flatten()
+            return preds
+        else:
+            return model.predict(X)
+
+    train_predictions = model_predict(model, X_train_np)
+    val_predictions = model_predict(model, X_val_np) if len(X_val_np) > 0 else None
+
+    def rae(y_true, y_pred):
+        numerator = np.sum(np.abs(y_pred - y_true))
+        denominator = np.sum(np.abs(y_true - np.mean(y_true)))
+        return numerator / denominator if denominator != 0 else np.nan
+
+    train_mse = mean_squared_error(y_train_np, train_predictions)
+    train_rmse = np.sqrt(train_mse)
+    train_rae = rae(y_train_np, train_predictions)
+
+    if val_predictions is not None:
+        val_mse = mean_squared_error(y_val_np, val_predictions)
+        val_rmse = np.sqrt(val_mse)
+        val_rae = rae(y_val_np, val_predictions)
+    else:
+        val_mse = val_rmse = val_rae = None
+
+    # 비정규화 (y 값만 역변환)
+    y_train_inv = scaler_y.inverse_transform(y_train_np)
+    y_val_inv = scaler_y.inverse_transform(y_val_np) if y_val_np is not None else None
+    train_pred_inv = scaler_y.inverse_transform(train_predictions.reshape(-1,1)).flatten()
+    val_pred_inv = scaler_y.inverse_transform(val_predictions.reshape(-1,1)).flatten() if val_predictions is not None else None
+
+    if y_train_inv is not None:
+        train_mse_inv = mean_squared_error(y_train_inv, train_pred_inv)
+        train_rmse_inv = np.sqrt(train_mse_inv)
+        train_rae_inv = rae(y_train_inv, train_pred_inv)
+    else:
+        train_mse_inv = train_rmse_inv = train_rae_inv = None
+
+    if val_pred_inv is not None and y_val_inv is not None:
+        val_mse_inv = mean_squared_error(y_val_inv, val_pred_inv)
+        val_rmse_inv = np.sqrt(val_mse_inv)
+        val_rae_inv = rae(y_val_inv, val_pred_inv)
+    else:
+        val_mse_inv = val_rmse_inv = val_rae_inv = None
+
+    # 메타데이터 저장
     model_info = {
         'model_type': model_type,
         'model_name': model_name,
         'model_selected': model_selected,
-        'parameters': {},  # 추후에 파라미터 추가 가능
+        'parameters': hyperparams,
         'framework': 'pytorch' if isinstance(model, torch.nn.Module) else 'sklearn',
-        'model_path': '',  # 실제 모델 파일 경로
+        'model_path': model_path,
         'input_size': input_size,
-        'train_loss': 10e8,  # 초기화된 학습 손실 값
-        'val_loss': 10e8     # 초기화된 검증 손실 값
+        'train_loss': train_mse,
+        'val_loss': val_mse if val_mse is not None else "N/A",
+        'creation_time': creation_time,
+        'metrics': {
+            'scaled': {
+                'train_mse': train_mse,
+                'train_rmse': train_rmse,
+                'train_rae': train_rae,
+                'val_mse': val_mse,
+                'val_rmse': val_rmse,
+                'val_rae': val_rae
+            },
+            'original': {
+                'train_mse': train_mse_inv,
+                'train_rmse': train_rmse_inv,
+                'train_rae': train_rae_inv,
+                'val_mse': val_mse_inv,
+                'val_rmse': val_rmse_inv,
+                'val_rae': val_rae_inv
+            }
+        }
     }
 
-    # 모델 저장
     try:
-        if model_info['framework'] == 'pytorch':
-            model_path = os.path.join(save_dir, f"{model_name}.pt")
-            torch.save(model.state_dict(), model_path)
-        elif model_info['framework'] == 'sklearn':
-            model_path = os.path.join(save_dir, f"{model_name}.pkl")
-            joblib.dump(model, model_path)
-        else:
-            raise ValueError("지원되지 않는 프레임워크입니다.")
-        model_info['model_path'] = model_path
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"모델 저장 중 오류 발생: {str(e)}"}), 500
-
-    # 모델 정보 JSON으로 저장
-    try:
-        metadata_path = os.path.join(save_dir, f"{model_name}.json")
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(model_info, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        return jsonify({"status": "error", "message": f"메타데이터 저장 중 오류 발생: {str(e)}"}), 500
+        return jsonify({'status': 'error', 'message': f"메타데이터 저장 중 오류 발생: {str(e)}"}), 500
 
-    return jsonify({"status": "success", "message": f"모델 {model_name}이(가) 저장되었습니다.", "model_path": model_info['model_path']}), 200
+    # 결과 반환
+    result = {
+        'status': 'success',
+        'message': f'모델 {model_name} 생성 및 학습 완료',
+        'model_name': model_name,
+        'creation_time': creation_time,
+        'hyperparameters': hyperparams,
+        'metrics': model_info['metrics']
+    }
 
-
+    return jsonify(result), 200
 
 @app.route('/api/delete_model', methods=['POST'])
 def delete_model():
@@ -245,8 +433,6 @@ def delete_model():
     except Exception as e:
         print(f"모델 삭제 중 오류 발생: {str(e)}")
         return jsonify({'status': 'error', 'message': f'모델 삭제 중 오류가 발생했습니다: {str(e)}'}), 500
-
-
 @app.route('/api/get_models', methods=['GET'])
 def get_models():
     models = []
@@ -261,15 +447,28 @@ def get_models():
             try:
                 with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
-                    # 필요한 키만 추출하여 클라이언트에 반환
-                    models.append({
+
+                    # 필요한 데이터 추출
+                    model_info = {
                         'model_name': metadata.get('model_name'),
                         'framework': metadata.get('framework'),
                         'model_selected': metadata.get('model_selected'),
                         'input_size': metadata.get('input_size'),
                         'train_loss': metadata.get('train_loss'),
-                        'val_loss': metadata.get('val_loss')
+                        'val_loss': metadata.get('val_loss'),
+                        'creation_time': metadata.get('creation_time'),  # 날짜 정보 추가
+                        'parameters': metadata.get('parameters'),  # 파라미터 정보 추가
+                    }
+
+                    # 스케일되지 않은 메트릭 추가
+                    original_metrics = metadata.get('metrics', {}).get('original', {})
+                    model_info.update({
+                        'val_rae_original': original_metrics.get('val_rae'),
+                        'val_rmse_original': original_metrics.get('val_rmse'),
                     })
+
+                    models.append(model_info)
+
             except Exception as e:
                 print(f"모델 메타데이터 로드 오류: {str(e)}")
                 continue
@@ -277,209 +476,6 @@ def get_models():
     return jsonify({'status': 'success', 'models': models})
 
 '''---------------------------------------------모델학습----------------------------------------------'''
-@app.route('/api/train_model', methods=['POST'])
-def train_model():
-    data = request.json
-    csv_filename = data.get('csv_filename')
-    model_name = data.get('model_name')
-    target_column = data.get('target_column')
-    val_ratio = float(data.get('val_ratio', 0.2))
-    train_loss = 99999999
-    val_loss = 99999999
-    # 필수 데이터 확인
-    if not csv_filename or not model_name or not target_column:
-        return jsonify({'status': 'error', 'message': '필요한 정보가 부족합니다.'}), 400
-
-    # CSV 파일 로드
-    csv_path = os.path.join(UPLOAD_FOLDER, csv_filename)
-    if not os.path.exists(csv_path):
-        return jsonify({'status': 'error', 'message': f"CSV 파일 '{csv_filename}'을 찾을 수 없습니다."}), 404
-
-    try:
-        df = pd.read_csv(csv_path)
-        print(df.head())  # 데이터 확인
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f"CSV 파일 읽기 오류: {str(e)}"}), 500
-
-    # Target 컬럼 확인
-    if target_column not in df.columns:
-        return jsonify({'status': 'error', 'message': f"Target 컬럼 '{target_column}'이 CSV 파일에 존재하지 않습니다."}), 400
-
-    # 모델 정보 로드
-    model_dir = os.path.join(MODEL_FOLDER, model_name)
-    metadata_path = os.path.join(model_dir, f"{model_name}.json")
-    if not os.path.exists(metadata_path):
-        return jsonify({'status': 'error', 'message': f"모델 메타데이터 '{metadata_path}'를 찾을 수 없습니다."}), 404
-
-    try:
-        with open(metadata_path, 'r', encoding='utf-8') as f:
-            model_info = json.load(f)
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f"메타데이터 로드 오류: {str(e)}"}), 500
-
-    model_path = model_info.get('model_path')
-    framework = model_info.get('framework')
-
-    # 모델 경로 및 프레임워크 확인
-    if not model_path or not framework:
-        return jsonify({'status': 'error', 'message': '모델 정보가 잘못되었습니다.'}), 500
-
-    # 모델 로드
-    try:
-        if framework == 'sklearn':
-            model = joblib.load(model_path)
-        elif framework == 'pytorch':
-            print('this is pytorch')
-        else:
-            return jsonify({'status': 'error', 'message': '지원되지 않는 모델 프레임워크입니다.'}), 500
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f"모델 로드 오류: {str(e)}"}), 500
-    
-    # # 데이터 전처리 및 학습
-    X = df.drop(columns=[target_column])
-    y = df[target_column]
-
-    # 결측값 처리
-    df = df.fillna(0)
-
-    # 스케일링 적용
-    scaler = MinMaxScaling(df,target_column=target_column)
-    X, y = scaler.get_scaled_data()
-
-
-    try:
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=val_ratio, random_state=42)
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f"데이터 분할 오류: {str(e)}"}), 500
-
-    # 모델 학습
-    try:
-        if framework == 'sklearn':
-            model.fit(X_train, y_train)
-            train_predictions = model.predict(X_train)
-            train_loss = mean_squared_error(y_train, train_predictions)
-
-            if X_val is not None:
-                val_predictions = model.predict(X_val)
-                val_loss = mean_squared_error(y_val, val_predictions)
-            else:
-                val_loss = None
-
-            # 모델 저장
-            joblib.dump(model, model_path)
-        else:
-            # 모델 학습
-            # PyTorch 모델 로드
-            input_size = model_info.get('input_size')
-            model_selected = model_info.get('model_selected')
-            
-                # JSON 파일에서 모델 설정 값 가져오기
-            model_selected = model_info.get('model_selected')
-            input_size = model_info.get('input_size')
-            parameters = model_info.get('parameters', {})  # 모델 파라미터 정보
-            # MLP 모델 초기화
-            if model_selected.startswith('MLP'):
-                hidden_size = parameters.get('hidden_size', 32)  # 기본값: 32
-                n_layers = parameters.get('n_layers', 1)        # 기본값: 1
-                output_size = parameters.get('output_size', 1)  # 기본값: 1
-
-                # MLP 클래스 사용하여 모델 생성
-                model = MLP(input_size=input_size, hidden_size=hidden_size, n_layers=n_layers, output_size=output_size)
-
-            # 데이터셋 및 데이터로더 생성
-            X_train_tensor = torch.tensor(X_train.values, dtype=torch.float32)
-            y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).unsqueeze(1)
-            train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-            train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
-            if X_val is not None:
-                X_val_tensor = torch.tensor(X_val.values, dtype=torch.float32)
-                y_val_tensor = torch.tensor(y_val.values, dtype=torch.float32).unsqueeze(1)
-                val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
-                val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-            else:
-                val_loader = None
-
-            # 손실 함수 및 옵티마이저 정의
-            criterion = nn.MSELoss()
-            optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-            # 얼리 스탑핑 적용 (early_stopping.py에서 EarlyStopping 클래스 가져오기)
-            from early_stopping import EarlyStopping  # 별도의 파일에 구현된 얼리 스탑핑 클래스
-
-            early_stopping = EarlyStopping(patience=10, verbose=False, path=os.path.join(model_dir, 'checkpoint.pt'))
-
-            num_epochs = 500
-            for epoch in range(num_epochs):
-                model.train()
-                train_loss = 0.0
-                for inputs, targets in train_loader:
-                    optimizer.zero_grad()
-                    outputs = model(inputs)
-                    loss = criterion(outputs, targets)
-                    loss.backward()
-                    optimizer.step()
-                    train_loss += loss.item() * inputs.size(0)
-                train_loss = train_loss / len(train_loader.dataset)
-
-                if val_loader is not None:
-                    model.eval()
-                    val_loss = 0.0
-                    with torch.no_grad():
-                        for inputs, targets in val_loader:
-                            outputs = model(inputs)
-                            loss = criterion(outputs, targets)
-                            val_loss += loss.item() * inputs.size(0)
-                    val_loss = val_loss / len(val_loader.dataset)
-
-                    # 얼리 스탑핑 체크
-                    early_stopping(val_loss, model)
-                    if early_stopping.early_stop:
-                        print(f"Epoch {epoch}: Early stopping")
-                        break
-                else:
-                    val_loss = None
-
-            # 최적의 모델 로드
-            if val_loader is not None and os.path.exists(os.path.join(model_dir, 'checkpoint.pt')):
-                model.load_state_dict(torch.load(os.path.join(model_dir, 'checkpoint.pt')))
-
-            # 학습된 모델 저장
-            torch.save(model.state_dict(), model_path)
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f"모델 학습 중 오류 발생: {str(e)}"}), 500
-    # JSON 파일 업데이트
-    try:
-        with open(metadata_path, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
-
-        # train_loss, val_loss 값을 업데이트
-        metadata['train_loss'] = train_loss
-        metadata['val_loss'] = val_loss if val_loss is not None else "N/A"
-
-        # 업데이트된 메타데이터 저장
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=4)
-
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f"JSON 파일 업데이트 오류: {str(e)}"}), 500
-
-    # Denormalize된 값 계산
-    denormalized_train_loss = scaler.denormalize([train_loss], [target_column])[0]
-    denormalized_val_loss = scaler.denormalize([val_loss], [target_column])[0] if val_loss else None
-
-    # 결과 반환
-    result = {
-        'model_name': model_name,
-        'train_loss': train_loss,
-        'val_loss': val_loss,
-        'denormalized_train_loss': denormalized_train_loss,
-        'denormalized_val_loss': denormalized_val_loss
-    }
-
-    return jsonify({'status': 'success', 'message': f'모델 {model_name} 학습 완료', 'result': result})
-
-
 # 모델 업로드 API
 @app.route('/api/upload_model', methods=['POST'])
 def upload_model():
@@ -837,7 +833,74 @@ def delete_result():
     except Exception as e:
         logging.error(f"Error deleting folder {folder_path}: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
-    
+
+
+
+
+def _train_ml(model, feature, target):
+        # sklearn 모델 학습
+        model.fit(feature, target)  
+        return None  # ML 모델은 training loss 추적 없음
+
+def _train_nn(model, feature, target, epochs=500):
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.MSELoss() 
+    early_stopping = EarlyStopping()
+    training_losses = []
+
+    # feature, target을 배치로 나눔
+    regression_batch = 32
+    Batch = []
+    for indexer in range((len(feature) // regression_batch) + 1):
+        fea_batch = feature[indexer * regression_batch : (indexer+1) * regression_batch,:]
+        tar_batch = target[indexer * regression_batch : (indexer+1) * regression_batch,:]
+        if len(fea_batch) == 0:
+            continue
+        Batch.append([fea_batch, tar_batch])
+
+    for epoch in range(epochs):
+        train_loss = 0
+        model.train()
+        for fea, tar in Batch:
+            fea_t = torch.tensor(fea, dtype=torch.float32)
+            tar_t = torch.tensor(tar, dtype=torch.float32)
+            optimizer.zero_grad()
+            output = model(fea_t)
+            loss = criterion(output, tar_t)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+
+        train_loss /= len(Batch)
+        early_stopping(train_loss)
+        training_losses.append(train_loss)
+        if epoch > 100 and early_stopping.early_stop:
+            break
+
+    return training_losses
+# 사용자 제공했던 EarlyStopping 클래스 그대로 사용
+class EarlyStopping:
+    def __init__(self, patience=10, delta=0.1):
+        self.patience = patience
+        self.delta = delta
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.train_loss_min = float('inf')
+
+    def __call__(self, train_loss):
+        score = -train_loss
+        if self.best_score is None:
+            self.best_score = score
+            self.train_loss_min = train_loss
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.counter = 0
+            self.train_loss_min = train_loss
 
 if __name__ == '__main__':
     app.run(debug=True)

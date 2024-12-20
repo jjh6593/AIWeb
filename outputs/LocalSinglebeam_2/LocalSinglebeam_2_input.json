@@ -1,9 +1,9 @@
 {
     "filename": "24-learning.csv",
-    "save_name": "",
+    "save_name": "LocalSinglebeam_2",
     "desire": 550.0,
     "option": "local",
-    "modeling_type": "Averaging",
+    "modeling_type": "Single",
     "strategy": "Exhaustive",
     "starting_points": {
         "att1": "150",
@@ -40,10 +40,8 @@
         "att15": "1000"
     },
     "models": [
-        "xgboost",
-        "mlp1",
-        "MLP2"
+        "xgboost"
     ],
-    "top_k": "3",
-    "alternative": "up_down"
+    "top_k": "2",
+    "alternative": "keep_up_down"
 }

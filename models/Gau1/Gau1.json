@@ -1,0 +1,37 @@
+{
+    "model_type": "scikit",
+    "model_name": "Gau1",
+    "model_selected": "XGBoost",
+    "parameters": {
+        "max_depth": 6,
+        "learning_rate": 0.3,
+        "n_estimators": 100,
+        "verbosity": 1,
+        "objective": "reg:squarederror",
+        "booster": "gbtree"
+    },
+    "framework": "sklearn",
+    "model_path": "models/Gau1/Gau1.pkl",
+    "input_size": null,
+    "train_loss": 0.001646681590923679,
+    "val_loss": 0.007651344204675218,
+    "creation_time": "2024-12-19 18:46:02",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.001646681590923679,
+            "train_rmse": 0.04057932467308542,
+            "train_rae": 125.5486856728767,
+            "val_mse": 0.007651344204675218,
+            "val_rmse": 0.08747196239181569,
+            "val_rae": 29.42481498026844
+        },
+        "original": {
+            "train_mse": 28182.57497463285,
+            "train_rmse": 167.87666596234527,
+            "train_rae": 125.54868597487832,
+            "val_mse": 130950.98423076987,
+            "val_rmse": 361.8715023744891,
+            "val_rae": 29.42481514910973
+        }
+    }
+}

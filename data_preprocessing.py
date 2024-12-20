@@ -28,7 +28,12 @@ class MinMaxScaling:
         X = self.scaled_data.drop(columns=[self.target_column])
         y = self.scaled_data[self.target_column]
         return X, y
-
+    def inverse_transform_values(self, data, columns):
+        denorm_data = []
+        for i, col in enumerate(columns):
+            element = data[i] * self.ranges[col] + self.min_vals[col]
+            denorm_data.append(element)
+        return denorm_data
     def denormalize(self, data, columns):
         denorm_data = []
         for i, col in enumerate(columns):

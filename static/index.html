@@ -1,104 +1,19 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>데이터 입력 - AIWEB</title>
-    <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <!-- 커스텀 CSS -->
-    <link rel="stylesheet" href="styles.css">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
-    <script src="js/navbar.js" defer></script> <!-- 네비게이션 바 로드 스크립트 -->
-    <script src="js/nextStep.js" defer></script> <!-- 다음 버튼 -->
-</head>
-<body data-page="index">
-<!-- 네비게이션 바 -->
-<div id="navbar"></div>
-
-<!-- 메인 콘텐츠 -->
-<div class="container my-4">
-    <h3 class="mb-4 text-center">데이터 입력</h3>
-    <!-- 파일 업로드 및 데이터 설정 -->
-    <div class="row g-4">
-        <!-- 파일 업로드 -->
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">CSV 파일 업로드</h5>
-                    <form id="uploadForm">
-                        <div class="mb-3">
-                            <label for="fileInput" class="form-label">파일 선택</label>
-                            <input type="file" class="form-control" id="fileInput" name="file" accept=".csv">
-                        </div>
-                        <div class="d-flex justify-content-between gap-2">
-                            <button type="submit" class="btn btn-primary">업로드</button>
-                            <button type="button" class="btn btn-outline-secondary" id="loadFileButton"
-                                    data-bs-toggle="modal" data-bs-target="#loadFileModal">불러오기
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- 데이터 미리보기 -->
-        <div class="col-md-8">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">데이터 미리보기</h5>
-                    <div id="dataPreview" class="table-responsive">
-                        <!-- 데이터 테이블이 여기에 표시됩니다 -->
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 데이터 설정 -->
-        <div class="col-md-12">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">필터링할 컬럼 선택</h5>
-                    <form id="excludeColumnsForm">
-                        <div id="excludeColumns" class="row mb-3">
-                            <!-- 각 컬럼이 여기에 동적으로 추가됩니다 -->
-                        </div>
-                        <div class="mb-3">
-                            <label for="newFilename" class="form-label">저장할 파일명 입력</label>
-                            <input type="text" class="form-control" id="newFilename"
-                                   placeholder="새 파일 이름을 입력하세요 (예: filtered_data.csv)" required>
-                        </div>
-                        <button type="button" class="btn btn-success" id="saveFilteredFile">필터링된 데이터 저장</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="my-4">
-        <button class="btn btn-primary" id="nextButton">다음</button>
-    </div>
-</div>
-
-<!-- 모달: 파일 불러오기 -->
-<div class="modal fade" id="loadFileModal" tabindex="-1" aria-labelledby="loadFileModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">파일 불러오기</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
-            </div>
-            <div class="modal-body">
-                <ul id="serverFileList" class="list-group">
-                    <!-- 서버에서 불러온 파일 목록 -->
-                </ul>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Bootstrap JS 및 커스텀 JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="js/main.js"></script>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AIWEB</title>
+    <!-- Google Fonts: Noto Sans KR -->
+    <link
+            href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&display=swap"
+            rel="stylesheet"
+    />
+    <script type="module" crossorigin src="/assets/index-D843XRU3.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-nRU0ynnd.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

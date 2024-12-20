@@ -1,0 +1,36 @@
+{
+    "model_type": "scikit",
+    "model_name": "DDTR",
+    "model_selected": "DecisionTreeRegressor",
+    "parameters": {
+        "criterion": "squared_error",
+        "splitter": "best",
+        "max_depth": 2,
+        "min_samples_split": 2,
+        "min_samples_leaf": 1
+    },
+    "framework": "sklearn",
+    "model_path": "models/DDTR/DDTR.pkl",
+    "input_size": null,
+    "train_loss": 0.02050401486082593,
+    "val_loss": 0.018664680537414588,
+    "creation_time": "2024-12-19 18:52:43",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.02050401486082593,
+            "train_rmse": 0.14319223044853352,
+            "train_rae": 0.41681326187907325,
+            "val_mse": 0.018664680537414588,
+            "val_rmse": 0.1366187415306355,
+            "val_rae": 0.38032654746340844
+        },
+        "original": {
+            "train_mse": 350921.47791560297,
+            "train_rmse": 592.3862573655832,
+            "train_rae": 0.4168132618790733,
+            "val_mse": 319441.6958566464,
+            "val_rmse": 565.1917337122389,
+            "val_rae": 0.3803265474634084
+        }
+    }
+}

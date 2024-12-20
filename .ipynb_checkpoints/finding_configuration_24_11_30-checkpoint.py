@@ -832,7 +832,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
 # In[24]:
 
 
-data = pd.read_csv("/Users/jonghunjeon/Desktop/AIWeb/uploads/24-learning2.csv").drop_duplicates()
+data = pd.read_csv("./learning_24.csv").drop_duplicates()
 model_list = ['MLP()',"ML_GradientBoostingRegressor()"]
 starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
 
@@ -861,5 +861,3 @@ models, training_losses, configurations, predictions, best_config, best_pred= ru
                                                                                   top_k = top_k, index = index,
                                                                                   up = up, alternative = alternative)
 
-
-# %%

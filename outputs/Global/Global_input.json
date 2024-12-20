@@ -1,10 +1,11 @@
 {
     "filename": "24-learning.csv",
-    "save_name": "",
+    "save_name": "\bGlobal",
     "desire": 550.0,
-    "option": "local",
+    "option": "global",
     "modeling_type": "Averaging",
-    "strategy": "Exhaustive",
+    "strategy": "Beam",
+    "tolerance": "1",
     "starting_points": {
         "att1": "150",
         "att2": "25",
@@ -40,10 +41,7 @@
         "att15": "1000"
     },
     "models": [
-        "xgboost",
-        "mlp1",
-        "MLP2"
+        "xgboost"
     ],
-    "top_k": "3",
-    "alternative": "up_down"
+    "beam_width": "5"
 }
