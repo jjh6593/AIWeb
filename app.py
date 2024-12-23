@@ -295,13 +295,19 @@ def save_model():
             model.eval()
             with torch.no_grad():
                 X_t = torch.tensor(X, dtype=torch.float32)
-                preds = model(X_t).numpy().flatten()
+                # 입력 데이터가 1D인 경우, 2D로 변환
+                if len(X_t.shape) == 1:
+                    X_t = X_t.view(-1, 1)
+                preds = model(X_t).detach().numpy().flatten()
             return preds
         else:
             return model.predict(X)
 
     train_predictions = model_predict(model, X_train_np)
     val_predictions = model_predict(model, X_val_np) if len(X_val_np) > 0 else None
+    train_pred_inv = scaler_y.inverse_transform(train_predictions.reshape(-1, 1)).flatten()
+    val_pred_inv = scaler_y.inverse_transform(val_predictions.reshape(-1, 1)).flatten() if val_predictions is not None else None
+
 
     def rae(y_true, y_pred):
         numerator = np.sum(np.abs(y_pred - y_true))
@@ -322,8 +328,9 @@ def save_model():
     # 비정규화 (y 값만 역변환)
     y_train_inv = scaler_y.inverse_transform(y_train_np)
     y_val_inv = scaler_y.inverse_transform(y_val_np) if y_val_np is not None else None
-    train_pred_inv = scaler_y.inverse_transform(train_predictions.reshape(-1,1)).flatten()
-    val_pred_inv = scaler_y.inverse_transform(val_predictions.reshape(-1,1)).flatten() if val_predictions is not None else None
+    if model_type =='pytorch':
+        train_pred_inv = scaler_y.inverse_transform(train_predictions.reshape(-1,1)).flatten()
+        val_pred_inv = scaler_y.inverse_transform(val_predictions.reshape(-1,1)).flatten() if val_predictions is not None else None
 
     if y_train_inv is not None:
         train_mse_inv = mean_squared_error(y_train_inv, train_pred_inv)
@@ -349,6 +356,7 @@ def save_model():
         'model_path': model_path,
         'input_size': input_size,
         'train_loss': train_mse,
+        'csv_filename': csv_filename,
         'val_loss': val_mse if val_mse is not None else "N/A",
         'creation_time': creation_time,
         'metrics': {
@@ -382,6 +390,7 @@ def save_model():
         'status': 'success',
         'message': f'모델 {model_name} 생성 및 학습 완료',
         'model_name': model_name,
+        'csv_filename': csv_filename,
         'creation_time': creation_time,
         'hyperparameters': hyperparams,
         'metrics': model_info['metrics']
@@ -458,6 +467,7 @@ def get_models():
                         'val_loss': metadata.get('val_loss'),
                         'creation_time': metadata.get('creation_time'),  # 날짜 정보 추가
                         'parameters': metadata.get('parameters'),  # 파라미터 정보 추가
+                        'csv_filename': metadata.get('csv_filename'),
                     }
 
                     # 스케일되지 않은 메트릭 추가
