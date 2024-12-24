@@ -3,6 +3,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 import os, datetime
 import pandas as pd
 import mimetypes
+import pickle
 import json
 from model import create_model
 from data_preprocessing import MinMaxScaling
@@ -199,15 +200,7 @@ def save_model():
     if target_column not in df.columns:
         return jsonify({'status': 'error', 'message': f"Target 컬럼 '{target_column}'이 CSV 파일에 존재하지 않습니다."}), 400
 
-    # 모델 생성 (초기 저장 X)
-    # try:
-    #     model = create_model(model_selected, input_size, hyperparams=hyperparams)
-    #     print(f"모델 생성 성공: {model}")  # 디버깅용
-    #     if not model:
-    #         raise ValueError("모델 생성 실패")
-    # except Exception as e:
-    #     return jsonify({"status": "error", "message": f"모델 생성 중 오류 발생: {str(e)}"}), 500
-    # 모델 생성 (초기 저장 X)
+    # 모델 생성
     try:
         # GradientBoostingRegressor 또는 RandomForestRegressor일 경우 외부에서 생성
         if model_selected == 'RandomForestRegressor':
@@ -274,6 +267,7 @@ def save_model():
     except Exception as e:
         print(f"모델 학습 중 오류 발생: {str(e)}")
         return jsonify({"status": "error", "message": f"모델 학습 중 오류 발생: {str(e)}"}), 500
+    
 
 
    # 모델 저장
@@ -288,7 +282,19 @@ def save_model():
         print(f"모델 저장 중 오류 발생: {str(e)}")
         return jsonify({"status": "error", "message": f"모델 저장 중 오류 발생: {str(e)}"}), 500
 
-
+    # 모델 불러오기 검증
+    try:
+        if isinstance(model, torch.nn.Module):
+            # PyTorch 모델
+            loaded_model = create_model(...)  # 모델 구조 생성
+            loaded_model.load_state_dict(torch.load(model_path))
+            print(f"PyTorch 모델 로드 성공: {loaded_model}")
+        else:
+            # scikit-learn 모델
+            loaded_model = joblib.load(model_path)
+            print(f"scikit-learn 모델 로드 성공: {loaded_model}")
+    except Exception as e:
+        print(f"모델 불러오기 중 오류 발생: {str(e)}")
     # Metrics 계산
     def model_predict(model, X):
         if isinstance(model, torch.nn.Module):
@@ -688,8 +694,7 @@ def submit_prediction():
 
         df = pd.read_csv(data_file_path).drop_duplicates()
         model_list = process_models(data['models'])
-        # model_list = ['MLP()', "ML_XGBoost()"]
-        #starting_point = data['starting_points']
+        
         models = None
         mode = data['option']
         print(mode)
@@ -708,16 +713,81 @@ def submit_prediction():
         up = data.get('up', 0)
         alternative = data.get('alternative', 'keep_move')
         
+        # ============================
+        # 여기서부터 모델 생성/파라미터 로드 로직
+        # ============================
+        MODEL_FOLDER = 'models'
+        models_list = []
+
+        for model_name in data['models']:
+            model_dir = os.path.join(MODEL_FOLDER, model_name)
+            metadata_path = os.path.join(model_dir, f"{model_name}.json")
+            model_path = os.path.join(model_dir, f"{model_name}.pkl")
+            
+            if not os.path.exists(metadata_path):
+                logging.error(f"No metadata found for model: {model_name}")
+                continue
+
+            try:
+                # 메타데이터 로드
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+
+                framework = metadata.get('framework')
+                model_selected = metadata.get('model_selected')
+                hyperparams = metadata.get('parameters', {})
+                input_size = metadata.get('input_size', None)
+                model_path = ""
+                print(model_selected)
+                # framework에 따라 model_path 설정
+                if framework == 'sklearn':
+                    model_path = os.path.join(model_dir, f"{model_name}.pkl")
+                elif framework == 'pytorch':
+                    model_path = os.path.join(model_dir, f"{model_name}.pt")
+                else:
+                    logging.error(f"Unsupported framework '{framework}' for model: {model_name}")
+                    continue
+                if framework == 'sklearn':
+                    # (1) pkl 파일이 존재하면 바로 불러오기
+                    try:
+                        with open(model_path, 'rb') as pf:
+                            model = joblib.load(pf)
+                        print(f"모델 로드 성공 (pkl): {model}")
+                    except Exception as e:
+                        logging.error(f"Error while loading model '{model_name}' from pkl: {e}")
+                        continue
+
+                elif framework == 'pytorch':
+                    # PyTorch 모델 로드 로직 (기존 그대로 유지)
+                    model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
+                    if not model:
+                        raise ValueError(f"PyTorch 모델 생성 실패: {model_name}")
+                    print(f"PyTorch 모델 생성 성공: {model}")
+
+                    if os.path.isfile(model_path):
+                        state_dict = torch.load(model_path, map_location='cpu')
+                        model.load_state_dict(state_dict)
+                        print(f"PyTorch 모델 파라미터 로드 성공: {model}")
+
+                else:
+                    raise ValueError(f"지원되지 않는 프레임워크입니다: {framework}")
+
+                # 완성된 모델 리스트에 추가
+                models_list.append(model)
+
+            except Exception as e:
+                logging.error(f"Error while creating/loading model '{model_name}': {e}")
+                continue
+
+        print("모델 생성/로딩 완료:")
+        for idx, m in enumerate(models_list):
+            print(f"{idx+1}. {m}")
 
         # 파일 이름 생성
         print(data['save_name'])
         save_name = data['save_name']
         outputs_dir = 'outputs'
         os.makedirs(outputs_dir, exist_ok=True)
-
-        # # 파일 경로 설정
-        # input_file_path = os.path.join(outputs_dir, f'{save_name}_input.json')
-        # output_file_path = os.path.join(outputs_dir, f'{save_name}_output.json')
         # 파일 이름 및 경로 설정
         save_name = data['save_name']
         outputs_dir = 'outputs'
@@ -733,13 +803,6 @@ def submit_prediction():
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
-        # # 동일한 파일명이 있을 경우 처리 (숫자 증가)
-        # counter = 1
-
-        # while os.path.exists(input_file_path) or os.path.exists(output_file_path):
-        #     input_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_input.json')
-        #     output_file_path = os.path.join(outputs_dir, f'{save_name}_{counter}_output.json')
-        #     counter += 1
 
         models, training_losses, configurations, predictions, best_config, best_pred = run(
             data=df,  # DataFrame
@@ -766,6 +829,8 @@ def submit_prediction():
             'predictions': convert_to_serializable(predictions),
             'best_config': convert_to_serializable(best_config),
             'best_pred': convert_to_serializable(best_pred),
+            'Target': data['desire'],
+            'filename': data['filename'],
         }
 
         # 데이터 저장
@@ -846,45 +911,44 @@ def delete_result():
 
 
 
+def _train_nn(model, X_train, y_train, epochs=100, lr=0.001, batch_size=32):
+    model.train()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.MSELoss()
+    early_stopping = EarlyStopping(patience=10)
 
-def _train_ml(model, feature, target):
-        # sklearn 모델 학습
-        model.fit(feature, target)  
-        return None  # ML 모델은 training loss 추적 없음
+    # NumPy 배열을 PyTorch 텐서로 변환
+    X_train = torch.tensor(X_train, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.float32)
 
-def _train_nn(model, feature, target, epochs=500):
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    criterion = nn.MSELoss() 
-    early_stopping = EarlyStopping()
+    dataset = torch.utils.data.TensorDataset(X_train, y_train)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
     training_losses = []
 
-    # feature, target을 배치로 나눔
-    regression_batch = 32
-    Batch = []
-    for indexer in range((len(feature) // regression_batch) + 1):
-        fea_batch = feature[indexer * regression_batch : (indexer+1) * regression_batch,:]
-        tar_batch = target[indexer * regression_batch : (indexer+1) * regression_batch,:]
-        if len(fea_batch) == 0:
-            continue
-        Batch.append([fea_batch, tar_batch])
-
     for epoch in range(epochs):
-        train_loss = 0
-        model.train()
-        for fea, tar in Batch:
-            fea_t = torch.tensor(fea, dtype=torch.float32)
-            tar_t = torch.tensor(tar, dtype=torch.float32)
+        epoch_loss = 0.0
+        for batch_X, batch_y in dataloader:
             optimizer.zero_grad()
-            output = model(fea_t)
-            loss = criterion(output, tar_t)
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+            
+            # NaN 또는 Inf 체크
+            if torch.isnan(loss) or torch.isinf(loss):
+                raise ValueError(f"손실 값에 문제가 발생했습니다. Loss: {loss.item()}")
+
             loss.backward()
             optimizer.step()
-            train_loss += loss.item()
+            epoch_loss += loss.item()
 
-        train_loss /= len(Batch)
-        early_stopping(train_loss)
-        training_losses.append(train_loss)
-        if epoch > 100 and early_stopping.early_stop:
+        avg_loss = epoch_loss / len(dataloader)
+        training_losses.append(avg_loss)
+        print(f"[DEBUG] Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}")
+
+        # Early stopping 체크
+        early_stopping(avg_loss)
+        if early_stopping.early_stop:
+            print(f"[DEBUG] Early stopping triggered at epoch {epoch+1}")
             break
 
     return training_losses

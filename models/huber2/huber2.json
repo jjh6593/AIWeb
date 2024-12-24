@@ -1,0 +1,35 @@
+{
+    "model_type": "scikit",
+    "model_name": "huber2",
+    "model_selected": "HuberRegressor",
+    "parameters": {
+        "epsilon": 1.35,
+        "max_iter": 100,
+        "alpha": 0.0001
+    },
+    "framework": "sklearn",
+    "model_path": "models/huber2/huber2.pkl",
+    "input_size": null,
+    "train_loss": 0.008009423966347967,
+    "csv_filename": "24-learning.csv",
+    "val_loss": 0.014644934009155673,
+    "creation_time": "2024-12-24 14:44:09",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.008009423966347967,
+            "train_rmse": 0.08949538516788431,
+            "train_rae": 124.24689382827212,
+            "val_mse": 0.014644934009155673,
+            "val_rmse": 0.12101625514432213,
+            "val_rae": 29.017897797058804
+        },
+        "original": {
+            "train_mse": 137079.4410071092,
+            "train_rmse": 370.24240843953737,
+            "train_rae": 124.24689382827215,
+            "val_mse": 250644.66258694328,
+            "val_rmse": 500.6442475320607,
+            "val_rae": 29.017897797058804
+        }
+    }
+}
