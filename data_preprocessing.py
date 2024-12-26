@@ -3,40 +3,39 @@ import pandas as pd
 import torch
 
 # 사용자 정의 Min-Max 스케일링 클래스
-class MinMaxScaling:
-    def __init__(self, df, target_column):
-        self.target_column = target_column
-        self.data = df.copy()
-        self.scaled_data = pd.DataFrame()
-        self.max_vals = {}
-        self.min_vals = {}
-        self.ranges = {}
+class MinMaxScalerWithFeatureUnits:
+    def __init__(self, feature_range=(0, 1), feature_units=None):
+        self.feature_range = feature_range
+        self.feature_units = feature_units or {}
+        self.min_ = None
+        self.scale_ = None
 
-        for col in df.columns:
-            max_val = df[col].max()
-            min_val = df[col].min()
-            self.max_vals[col] = max_val
-            self.min_vals[col] = min_val
-            self.ranges[col] = max_val - min_val
-            # 만약 특징값이 모두 동일하면 스케일링하지 않고 0으로 설정
-            if self.ranges[col] == 0:
-                self.scaled_data[col] = 0
-            else:
-                self.scaled_data[col] = (df[col] - min_val) / self.ranges[col]
+    def fit(self, X):
+        X = np.asarray(X)
+        n_features = X.shape[1]
+        self.min_ = np.zeros(n_features)
+        self.scale_ = np.zeros(n_features)
 
-    def get_scaled_data(self):
-        X = self.scaled_data.drop(columns=[self.target_column])
-        y = self.scaled_data[self.target_column]
-        return X, y
-    def inverse_transform_values(self, data, columns):
-        denorm_data = []
-        for i, col in enumerate(columns):
-            element = data[i] * self.ranges[col] + self.min_vals[col]
-            denorm_data.append(element)
-        return denorm_data
-    def denormalize(self, data, columns):
-        denorm_data = []
-        for i, col in enumerate(columns):
-            element = data[i] * self.ranges[col] + self.min_vals[col]
-            denorm_data.append(element)
-        return denorm_data
+        for i in range(n_features):
+            unit = self.feature_units.get(i, 1)  # 기본 unit은 1
+            feature_min = X[:, i].min()
+            adjusted_min = feature_min - (feature_min % unit)
+            self.min_[i] = adjusted_min
+            self.scale_[i] = X[:, i].max() - adjusted_min
+
+        return self
+
+    def transform(self, X):
+        X = np.asarray(X)
+        return (X - self.min_) / self.scale_ * (self.feature_range[1] - self.feature_range[0]) + self.feature_range[0]
+
+    def fit_transform(self, X):
+        return self.fit(X).transform(X)
+
+# 예제 사용
+data_points = [[100, 200], [20, 300], [50, 400]]
+feature_units = {0: 5, 1: 10}  # 첫 번째 feature는 5 단위, 두 번째 feature는 10 단위
+scaler = MinMaxScalerWithFeatureUnits(feature_units=feature_units)
+scaled_data = scaler.fit_transform(data_points)
+
+print(scaled_data)
