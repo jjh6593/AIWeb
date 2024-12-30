@@ -6,7 +6,7 @@ import mimetypes
 import pickle
 import json
 from model import create_model
-from data_preprocessing import MinMaxScaling
+# from data_preprocessing import MinMaxScaling
 import joblib
 from data_utils import load_data, save_data, preprocess_data, get_columns, get_data_preview
 # 전역에서 PyTorch와 관련 모듈 임포트
