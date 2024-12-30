@@ -935,6 +935,8 @@ def get_training_results():
                 with open(output_file_path, 'r', encoding='utf-8') as f:
                     output_data = json.load(f)
                     results.append({
+                        'mode': output_data.get('mode'),
+                        'timestamp': output_data.get('timestamp'),
                         'folder_name': str(folder_name),
                         'predictions' : output_data.get('predictions'),
                         'configurations': output_data.get('configurations'),
