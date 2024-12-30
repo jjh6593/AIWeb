@@ -937,6 +937,7 @@ def get_training_results():
                     results.append({
                         'mode': output_data.get('mode'),
                         'timestamp': output_data.get('timestamp'),
+                        'target': output_data.get('Target'),
                         'folder_name': str(folder_name),
                         'predictions' : output_data.get('predictions'),
                         'configurations': output_data.get('configurations'),
