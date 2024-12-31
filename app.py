@@ -41,14 +41,17 @@ mimetypes.add_type('application/javascript', '.js', strict=True)
 UPLOAD_FOLDER = 'uploads'
 OUTPUTS_FOLDER = 'outputs'
 MODEL_FOLDER = 'models'
+METADATA_FOLDER = os.path.join(UPLOAD_FOLDER, 'metadata')  # 메타데이터 저장 폴더
 
 # Flask 설정에 디렉토리 경로 추가
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUTS_FOLDER'] = OUTPUTS_FOLDER
 app.config['MODEL_FOLDER'] = MODEL_FOLDER
+# 폴더 생성
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
 os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
+os.makedirs(METADATA_FOLDER, exist_ok=True)
 
 # 라우트 설정
 
@@ -90,6 +93,68 @@ def upload_csv():
 def get_csv_files():
     files = os.listdir(UPLOAD_FOLDER)
     return jsonify({'status': 'success', 'files': files})
+
+# -------------------------
+# 새롭게 추가된 메타데이터 저장(생성/수정) API
+# -------------------------
+@app.route('/api/save_csv_metadata', methods=['POST'])
+def save_csv_metadata():
+    """
+    메타데이터를 새로 생성하거나, 기존 메타데이터를 갱신(덮어쓰기)하기 위한 엔드포인트.
+    - 요청 예:
+        {
+          "filename": "example.csv",
+          "metadata": [
+            {
+              "column": "Temperature",
+              "unit": "C",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "column": "Pressure",
+              "unit": "bar",
+              "min": 1,
+              "max": 50
+            }
+          ]
+        }
+    - 응답 예:
+        {
+          "status": "success",
+          "message": "Metadata saved/updated successfully.",
+          "saved_metadata": [...]  // 저장된 메타데이터 그대로
+        }
+    """
+    data = request.json
+
+    filename = data.get('filename')
+    metadata = data.get('metadata', [])
+
+    if not filename:
+        return jsonify({'status': 'error', 'message': 'filename 파라미터가 필요합니다.'}), 400
+
+    if not metadata:
+        return jsonify({'status': 'error', 'message': 'metadata가 비어 있습니다.'}), 400
+
+    # 실제 CSV가 존재하는지 체크 (선택적으로)
+    csv_path = os.path.join(UPLOAD_FOLDER, filename)
+    if not os.path.exists(csv_path):
+        return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
+
+    # 메타데이터를 저장할 경로
+    metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
+    try:
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        return jsonify({
+            'status': 'success',
+            'message': 'Metadata saved/updated successfully.',
+            'saved_metadata': metadata
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 # 3 CSV 파일 내용 가져오기
 @app.route('/api/get_csv_data', methods=['GET'])
@@ -937,6 +1002,7 @@ def get_training_results():
                     results.append({
                         'mode': output_data.get('mode'),
                         'timestamp': output_data.get('timestamp'),
+                        'target': output_data.get('Target'),
                         'folder_name': str(folder_name),
                         'predictions' : output_data.get('predictions'),
                         'configurations': output_data.get('configurations'),
