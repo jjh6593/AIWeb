@@ -240,7 +240,9 @@ def save_model():
     model_type = data.get('model_type')
     model_name = data.get('model_name')
     model_selected = data.get('model_selected')
-    input_size = data.get('input_size', None)
+    # input_size = data.get('input_size', None)
+    input_size = data.get('hyperparameters', {}).get('input_size', None)
+
     csv_filename = data.get('csv_filename')
     hyperparams = data.get('hyperparameters', {})
     target_column = "Target"
@@ -609,6 +611,7 @@ def get_models():
 
     return jsonify({'status': 'success', 'models': models})
 
+
 '''---------------------------------------------모델학습----------------------------------------------'''
 # 모델 업로드 API
 @app.route('/api/upload_model', methods=['POST'])
@@ -857,6 +860,8 @@ def submit_prediction():
         up = data.get('up', 0)
         alternative = data.get('alternative', 'keep_move')
         
+
+       
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
         # ============================
@@ -943,19 +948,108 @@ def submit_prediction():
         # 동일한 폴더가 있으면 그대로 사용
         if not os.path.exists(subfolder_path):
             os.makedirs(subfolder_path)
+        model_list = ['MLP()',"ML_XGBoost()"]#,""
+        starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
 
+
+        models = None # models = [model, model, model, ...]
+        desired = 555
+        # mode = 'local'
+        # modeling = 'averaging'
+        # strategy = 'beam'
+        # tolerance = 2
+        # beam_width = 5
+        # num_candidates = 5
+        # escape = True
+        # top_k = 2
+        # index = 0
+        # up = True
+        # alternative = 'keep_move'
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
-        models, training_losses, configurations, predictions, best_config, best_pred, erase = run(data = data, models = models,
-                                                                                  model_list = model_list, desired = desired,
-                                                                                  starting_point = starting_point, 
-                                                                                  mode = mode, modeling = modeling,
-                                                                                  strategy = strategy, tolerance = tolerance, 
-                                                                                  beam_width = beam_width,
-                                                                                  num_cadidates = num_candidates, escape = escape, 
-                                                                                  top_k = top_k, index = index,
-                                                                                  up = up, alternative = alternative)
+        # models, training_losses, configurations, predictions, best_config, best_pred, erase = parameter_prediction(data = df, models = models,
+        #                                                                           model_list = model_list, desired = desired,
+        #                                                                           starting_point = starting_point, 
+        #                                                                           mode = mode, modeling = modeling,
+        #                                                                           strategy = strategy, tolerance = tolerance, 
+        #                                                                           beam_width = beam_width,
+        #                                                                           num_candidates = num_candidates, escape = escape, 
+        #                                                                           top_k = top_k, index = index,
+        #                                                                           up = up, alternative = alternative)
+         # 입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
+        # option에 따라 50개(global) 혹은 10개(local) 생성
+        n_points = 50 if data['option'] == 'global' else 10
+
+        # 입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
+        var_keys = sorted(data['starting_points'].keys())
+
+        # configurations & predictions 초기화
+        configurations = []
+        predictions = []
+
+        # 정규분포 생성을 위한 임시 표준편차(예시): 입력값 생성용 stdev=1.0, 예측값 생성용 stdev=10.0
+        stdev_for_config = 1.0
+        stdev_for_pred = 10.0
+
+        target_value = float(data['desire'])
+
+                # 기본값 설정
+        default_unit_val = 5.0  # units_map에서 값을 찾지 못하면 fallback
+        default_start_val = 0.0  # starting_points가 없을 경우 기본값
+        stdev_for_config = data.get('stdev_for_config', 1.0)  # 표준편차 기본값
+        stdev_for_pred = data.get('stdev_for_pred', 1.0)  # 표준편차 기본값
+        target_value = data.get('target_value', 0.0)  # Target 기본값
+
+        # (1) configurations 생성
+        for _ in range(n_points):
+            row = []
+            for var in var_keys:
+                # starting_points에서 값을 가져오거나 기본값 사용
+                start_val = float(data.get('starting_points', {}).get(var, default_start_val))
+                # units_map에서 값을 가져오거나 기본값 사용
+                unit_val = float(units_map.get(var, default_unit_val))
+
+                # 정규분포에서 샘플
+                sampled = random.gauss(start_val, stdev_for_config)
+                # unit 단위 반올림
+                if unit_val != 0:
+                    sampled = round(sampled / unit_val) * unit_val
+                row.append(sampled)
+            configurations.append(row)
+
+        # (2) predictions 생성
+        #    Target 값을 중심으로 정규분포 샘플링해서 n_points 개 생성
+        for _ in range(n_points):
+            pred = random.gauss(target_value, stdev_for_pred)
+            predictions.append(pred)
+
+        # (3) best_config / best_pred 찾기
+        #    각 predictions에 대해 Target과의 차(diffs) 계산
+        diffs = [abs(p - target_value) for p in predictions]
+
+        if data.get('option', 'local') == 'local':  # 기본값은 'local'
+            # local인 경우: (config, pred, diff)를 하나의 튜플로 묶어서 오름차순 정렬 후 반환
+            combined = list(zip(configurations, predictions, diffs))
+            combined.sort(key=lambda x: x[2])  # diff 기준 정렬
+
+            # 정렬된 결과를 다시 분리
+            configurations = [c[0] for c in combined]
+            predictions = [c[1] for c in combined]
+            diffs_sorted = [c[2] for c in combined]
+
+            # 가장 앞(오차가 작은) 것이 best
+            best_idx = 0
+            best_config = configurations[best_idx]
+            best_pred = predictions[best_idx]
+
+        else:
+            # global인 경우: 정렬 없이, 오차가 가장 적은 인덱스를 찾는다
+            best_idx = min(range(n_points), key=lambda i: diffs[i])
+            best_config = configurations[best_idx]
+            best_pred = predictions[best_idx]
+
+
         # models, training_loss,configurations, predictions, best_config, best_pred = parameter_prediction(
         #     data=df,  # DataFrame
         #     models=models_list,
@@ -980,67 +1074,12 @@ def submit_prediction():
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         # 입력 데이터에도 날짜정보 추가
         data['timestamp'] = timestamp
-
-        # # option에 따라 50개(global) 혹은 10개(local) 생성
-        # n_points = 50 if data['option'] == 'global' else 10
-
-        # # 입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
-        # var_keys = sorted(data['starting_points'].keys())
-
-        # # configurations & predictions 초기화
-        # configurations = []
-        # predictions = []
-
-        # # 정규분포 생성을 위한 임시 표준편차(예시): 입력값 생성용 stdev=1.0, 예측값 생성용 stdev=10.0
-        # stdev_for_config = 1.0
-        # stdev_for_pred = 10.0
-
-        # target_value = float(data['desire'])
-
-        # # (1) configurations 생성
-        # for _ in range(n_points):
-        #     row = []
-        #     for var in var_keys:
-        #         start_val = float(data['starting_points'][var])
-        #         unit_val = units_map.get(var, 5.0)  # 혹시 없다면 5로 fallback
-        #         # 정규분포에서 샘플
-        #         sampled = random.gauss(start_val, stdev_for_config)
-        #         # unit단위 반올림
-        #         if unit_val != 0:
-        #             sampled = round(sampled / unit_val) * unit_val
-        #         row.append(sampled)
-        #     configurations.append(row)
-
-        # # (2) predictions 생성
-        # #    Target값을 중심으로 정규분포 샘플링해서 n_points 개 생성
-        # for _ in range(n_points):
-        #     pred = random.gauss(target_value, stdev_for_pred)
-        #     predictions.append(pred)
-
-        # # (3) best_config / best_pred 찾기
-        # #    각 predictions에 대해 Target과의 차(diffs) 계산
-        # diffs = [abs(p - target_value) for p in predictions]
-
-        # if data['option'] == 'local':
-        #     # local인 경우: (config, pred, diff)를 하나의 튜플로 묶어서 오름차순 정렬 후 반환
-        #     combined = list(zip(configurations, predictions, diffs))
-        #     combined.sort(key=lambda x: x[2])  # diff 기준 정렬
-
-        #     # 정렬된 결과를 다시 분리
-        #     configurations = [c[0] for c in combined]
-        #     predictions = [c[1] for c in combined]
-        #     diffs_sorted = [c[2] for c in combined]
-
-        #     # 가장 앞(오차가 작은) 것이 best
-        #     best_idx = 0
-        #     best_config = configurations[best_idx]
-        #     best_pred = predictions[best_idx]
-
-        # else:
-        #     # global인 경우: 정렬 없이, 오차가 가장 적은 인덱스를 찾는다
-        #     best_idx = min(range(n_points), key=lambda i: diffs[i])
-        #     best_config = configurations[best_idx]
-        #     best_pred = predictions[best_idx]
+        # configurations, predictions 등을 전부 파이썬 기본 자료형으로 바꾸기
+        configurations = convert_to_python_types(configurations)
+        predictions = convert_to_python_types(predictions)
+        best_config = convert_to_python_types(best_config)
+        best_pred = convert_to_python_types(best_pred)
+       
         output_data = {
             'mode': data['option'],
             'timestamp': timestamp,  # output에도 동일 날짜 정보
@@ -1064,7 +1103,6 @@ def submit_prediction():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
-    
 
 '''---------------------------------------------학습 결과----------------------------------------------'''
 # 학습 결과 가져오기
@@ -1349,5 +1387,29 @@ def rae(y_true, y_pred):
         numerator = np.sum(np.abs(y_pred - y_true))
         denominator = np.sum(np.abs(y_true - np.mean(y_true)))
         return numerator / denominator if denominator != 0 else np.nan
+
+
+def convert_to_python_types(obj):
+    """입력된 obj(리스트, 스칼라 등) 내 모든 원소를 파이썬 기본 자료형으로 변환"""
+    if isinstance(obj, torch.Tensor):
+        # 텐서를 파이썬 list로
+        return obj.detach().cpu().numpy().tolist()
+    elif isinstance(obj, np.ndarray):
+        # 넘파이 배열 -> list
+        return obj.tolist()
+    elif isinstance(obj, list):
+        # 리스트라면, 내부 요소를 재귀적으로 변환
+        return [convert_to_python_types(o) for o in obj]
+    elif isinstance(obj, (float, int, str)):
+        # 기본형이면 그대로 리턴
+        return obj
+    else:
+        # 혹시 모르는 케이스 (ex: np.float32 등)은 float()로 캐스팅
+        try:
+            return float(obj)
+        except:
+            # 그래도 안 되면 그냥 문자열 처리
+            return str(obj)
+        
 if __name__ == '__main__':
     app.run(debug=True)

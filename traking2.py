@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
 import sys
 import torch
 import torch.nn as nn
@@ -28,15 +22,14 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.gaussian_process import GaussianProcessRegressor
 
 
-
-# print("torch", torch.__version__)
-# print("numpy", torch.__version__)
-# print("pandas", torch.__version__)
-# print("xgboost", xgboost.__version__)
-# print("sklearn", sklearn.__version__)
+# In[2]:
 
 
-
+print("torch", torch.__version__)
+print("numpy", torch.__version__)
+print("pandas", torch.__version__)
+print("xgboost", xgboost.__version__)
+print("sklearn", sklearn.__version__)
 
 
 def parameter_prediction(data, models, model_list, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
@@ -493,7 +486,7 @@ def parameter_prediction(data, models, model_list, desired, starting_point, mode
             return [configuration], prediction, configuration, prediction
         
     class GlobalMode(UNIVERSE):
-        def __init__(self, desired, models, modeling, strategy, tolerance = configuration_tolerance, num_candidates =num_candidates,steps = configuration_steps):
+        def __init__(self, desired, models, modeling, strategy, tolerance = configuration_tolerance, steps = configuration_steps):
             super().__init__()
             self.desired = desired
             self.y_prime = self.desired / (target.max[0] - target.min[0])
@@ -502,7 +495,6 @@ def parameter_prediction(data, models, model_list, desired, starting_point, mode
             self.strategy = strategy
             self.tolerance = tolerance / (target.max[0] - target.min[0])
             self.steps = steps
-            self.num_candidates = num_candidates  # num_candidates 초기화
             for model in models : 
                 try: model.train()
                 except: pass
@@ -774,7 +766,7 @@ def parameter_prediction(data, models, model_list, desired, starting_point, mode
         
     configurations, predictions, best_config, best_pred = None, None, None, None
     if mode == 'global' :
-        G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy, num_candidates=num_candidates)
+        G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
         if strategy == 'beam':
             configurations, predictions, best_config, best_pred = G.beam(starting_point = starting_point,
                                                                  beam_width = beam_width)
@@ -797,54 +789,3 @@ def parameter_prediction(data, models, model_list, desired, starting_point, mode
         
         
     return models, training_losses, configurations, predictions, best_config, best_pred, erase
-
-
-# In[197]:
-
-
-"""
-
-[입력]
-
-    (pd.DataFrame) data
-    (list) models (모델 재이용이 아닌 경우 : None, 재이용하는 경우 리스트 안에 model들 담아서)
-    (list) model_list  (e.g., model_list = ['MLP()',"ML_XGBoost()",'MLP(n_layers = 2)', 'MLP(n_layers = 3)', 
-                       "ML_XGBoost()","ML_LinearRegressor()", "ML_Ridge()", "ML_Lasso()",
-                       "ML_DecisionTreeRegressor()",  "ML_RandomForestRegressor()", "ML_GradientBoostingRegressor()",
-                       "ML_SVR()", "ML_KNeighborsRegressor()", "ML_HuberRegressor()", "ML_GaussianProcessRegressor()" ])
-                       
-    (str) mode : {'global', 'local'}
-    (str) modeling : {'single', 'averaging', 'ensemble'} # ensemble pending
-    (str) strategy : {'beam', 'stochastic', 'best_one', 'exhaustive', 'manual', 'sensitivity'} # sensitivity pending
-    
-    (list) starting_point : 시작점
-    
-    (float) desired : 찾고자하는 목표값
-    (float) tolerance : Global 모드에서 오차허용범위
-    (int) beam_width : beam 전략에서 
-    (int) num_cadidates : stochastic 전략에서 후보 개수
-    (bool) escape : best_one 전략에서 escape 옵션 사용할 것인지 여부
-    (int) top_k : exhaustive 전략에서 alternative로 keep_up_down 선택 시 몇 개 feature를 고려할 것인지
-    (str) alternative : exhaustive 전략에서 대안 {'up_down','keep_move', 'keep_up_down'}
-    (int) index : manual 전략에서 몇번쨰 feature를 움직일 것인지
-    (bool) up : manual 전략에서 feature를 올릴 것인지 (False이면 낮춤)
-
-[출력]
-    
-    (list) models
-    (list) training_losses : 회귀모델 훈련 로스
-    (list) configurations : 입력값 리스트
-    (list) predictions : 예측값 리스트
-    (list) best_config : 최고 입력값 리스트
-    (float) best_pred : 최고 예측값
-    
-                       
-"""
-
-
-# In[198]:
-
-
-
-
-
