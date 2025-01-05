@@ -41,7 +41,7 @@ mimetypes.add_type('application/javascript', '.js', strict=True)
 UPLOAD_FOLDER = 'uploads'
 OUTPUTS_FOLDER = 'outputs'
 MODEL_FOLDER = 'models'
-METADATA_FOLDER = os.path.join(UPLOAD_FOLDER, 'metadata')  # 메타데이터 저장 폴더
+METADATA_FOLDER = 'metadata'  # 메타데이터 저장 폴더
 
 # Flask 설정에 디렉토리 경로 추가
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -141,7 +141,12 @@ def save_csv_metadata():
     csv_path = os.path.join(UPLOAD_FOLDER, filename)
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
-
+    # (1) unit, min, max를 float으로 변환
+    for item in metadata:
+        # get()에서 디폴트값 0.0 (또는 None)으로 지정해도 됨
+        item['unit'] = float(item.get('unit', 0.0))
+        item['min'] = float(item.get('min', 0.0))
+        item['max'] = float(item.get('max', 0.0))
     # 메타데이터를 저장할 경로
     metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
     try:
@@ -720,11 +725,36 @@ def submit_prediction():
         logging.debug(json.dumps(data, indent=4, ensure_ascii=False))
 
         # 필수 필드 확인
-        required_fields = ['filename', 'desire', 'save_name', 'option', 'modeling_type', 'strategy', 'starting_points', 'units', 'models']
+        required_fields = ['filename', 'desire', 'save_name', 'option', 'modeling_type', 'strategy', 'starting_points', 'models']
         for field in required_fields:
             if field not in data:
                 logging.error(f"Missing field: {field}")
                 return jsonify({'status': 'error', 'message': f'필수 필드가 누락되었습니다: {field}'}), 400
+
+        # filename으로 CSV 및 메타데이터를 찾음
+        data_file_path = os.path.join('uploads', data['filename'])
+        if not os.path.exists(data_file_path):
+            logging.error(f"Data file not found: {data['filename']}")
+            return jsonify({'status': 'error', 'message': f'Data file not found: {data["filename"]}'}), 400
+
+        # (1) **메타데이터 로드**: filename 기반
+        metadata_path = os.path.join(METADATA_FOLDER, f"{data['filename']}_metadata.json")
+        if not os.path.exists(metadata_path):
+            logging.error(f"Metadata file not found for: {data['filename']}")
+            return jsonify({'status': 'error', 'message': f'Metadata file not found for: {data["filename"]}'}), 400
+
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            stored_metadata = json.load(f)
+        
+        # (2) column -> unit 매핑 (예: {'att1': 5.0, 'att2': 5.0, ...})
+        #     min/max를 쓰는 로직이 필요하다면 비슷한 방식으로 매핑해두고 활용할 수 있음
+        units_map = {}
+        for m in stored_metadata:
+            col = m['column']
+            units_map[col] = float(m['unit'])  # 이미 float으로 저장되었지만 혹시 몰라 float() 처리
+
+        # CSV -> DataFrame 로드
+        df = pd.read_csv(data_file_path).drop_duplicates()
 
         # 'option' 필드 검증
         if data['option'] not in ['local', 'global']:
@@ -786,69 +816,69 @@ def submit_prediction():
         MODEL_FOLDER = 'models'
         models_list = []
 
-        # for model_name in data['models']:
-        #     model_dir = os.path.join(MODEL_FOLDER, model_name)
-        #     metadata_path = os.path.join(model_dir, f"{model_name}.json")
-        #     model_path = os.path.join(model_dir, f"{model_name}.pkl")
+        for model_name in data['models']:
+            model_dir = os.path.join(MODEL_FOLDER, model_name)
+            metadata_path = os.path.join(model_dir, f"{model_name}.json")
+            model_path = os.path.join(model_dir, f"{model_name}.pkl")
             
-        #     if not os.path.exists(metadata_path):
-        #         logging.error(f"No metadata found for model: {model_name}")
-        #         continue
+            if not os.path.exists(metadata_path):
+                logging.error(f"No metadata found for model: {model_name}")
+                continue
 
-        #     try:
-        #         # 메타데이터 로드
-        #         with open(metadata_path, 'r', encoding='utf-8') as f:
-        #             metadata = json.load(f)
+            try:
+                # 메타데이터 로드
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
 
-        #         framework = metadata.get('framework')
-        #         model_selected = metadata.get('model_selected')
-        #         hyperparams = metadata.get('parameters', {})
-        #         input_size = metadata.get('input_size', None)
-        #         model_path = ""
-        #         print(model_selected)
-        #         # framework에 따라 model_path 설정
-        #         if framework == 'sklearn':
-        #             model_path = os.path.join(model_dir, f"{model_name}.pkl")
-        #         elif framework == 'pytorch':
-        #             model_path = os.path.join(model_dir, f"{model_name}.pt")
-        #         else:
-        #             logging.error(f"Unsupported framework '{framework}' for model: {model_name}")
-        #             continue
-        #         if framework == 'sklearn':
-        #             # (1) pkl 파일이 존재하면 바로 불러오기
-        #             try:
-        #                 with open(model_path, 'rb') as pf:
-        #                     model = joblib.load(pf)
-        #                 print(f"모델 로드 성공 (pkl): {model}")
-        #             except Exception as e:
-        #                 logging.error(f"Error while loading model '{model_name}' from pkl: {e}")
-        #                 continue
+                framework = metadata.get('framework')
+                model_selected = metadata.get('model_selected')
+                hyperparams = metadata.get('parameters', {})
+                input_size = metadata.get('input_size', None)
+                model_path = ""
+                print(model_selected)
+                # framework에 따라 model_path 설정
+                if framework == 'sklearn':
+                    model_path = os.path.join(model_dir, f"{model_name}.pkl")
+                elif framework == 'pytorch':
+                    model_path = os.path.join(model_dir, f"{model_name}.pt")
+                else:
+                    logging.error(f"Unsupported framework '{framework}' for model: {model_name}")
+                    continue
+                if framework == 'sklearn':
+                    # (1) pkl 파일이 존재하면 바로 불러오기
+                    try:
+                        with open(model_path, 'rb') as pf:
+                            model = joblib.load(pf)
+                        print(f"모델 로드 성공 (pkl): {model}")
+                    except Exception as e:
+                        logging.error(f"Error while loading model '{model_name}' from pkl: {e}")
+                        continue
 
-        #         elif framework == 'pytorch':
-        #             # PyTorch 모델 로드 로직 (기존 그대로 유지)
-        #             model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
-        #             if not model:
-        #                 raise ValueError(f"PyTorch 모델 생성 실패: {model_name}")
-        #             print(f"PyTorch 모델 생성 성공: {model}")
+                elif framework == 'pytorch':
+                    # PyTorch 모델 로드 로직 (기존 그대로 유지)
+                    model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
+                    if not model:
+                        raise ValueError(f"PyTorch 모델 생성 실패: {model_name}")
+                    print(f"PyTorch 모델 생성 성공: {model}")
 
-        #             if os.path.isfile(model_path):
-        #                 state_dict = torch.load(model_path, map_location='cpu')
-        #                 model.load_state_dict(state_dict)
-        #                 print(f"PyTorch 모델 파라미터 로드 성공: {model}")
+                    if os.path.isfile(model_path):
+                        state_dict = torch.load(model_path, map_location='cpu')
+                        model.load_state_dict(state_dict)
+                        print(f"PyTorch 모델 파라미터 로드 성공: {model}")
 
-        #         else:
-        #             raise ValueError(f"지원되지 않는 프레임워크입니다: {framework}")
+                else:
+                    raise ValueError(f"지원되지 않는 프레임워크입니다: {framework}")
 
-        #         # 완성된 모델 리스트에 추가
-        #         models_list.append(model)
+                # 완성된 모델 리스트에 추가
+                models_list.append(model)
 
-        #     except Exception as e:
-        #         logging.error(f"Error while creating/loading model '{model_name}': {e}")
-        #         continue
+            except Exception as e:
+                logging.error(f"Error while creating/loading model '{model_name}': {e}")
+                continue
 
-        # print("모델 생성/로딩 완료:")
-        # for idx, m in enumerate(models_list):
-        #     print(f"{idx+1}. {m}")
+        print("모델 생성/로딩 완료:")
+        for idx, m in enumerate(models_list):
+            print(f"{idx+1}. {m}")
 
         # 파일 이름 생성
         print(data['save_name'])
@@ -917,7 +947,7 @@ def submit_prediction():
             row = []
             for var in var_keys:
                 start_val = float(data['starting_points'][var])
-                unit_val = float(data['units'][var])
+                unit_val = units_map.get(var, 5.0)  # 혹시 없다면 5로 fallback
                 # 정규분포에서 샘플
                 sampled = random.gauss(start_val, stdev_for_config)
                 # unit단위 반올림
@@ -992,13 +1022,24 @@ def get_training_results():
 
     for folder_name in os.listdir(OUTPUTS_FOLDER):
         folder_path = os.path.join(OUTPUTS_FOLDER, folder_name)
-        
+        input_file_path = os.path.join(folder_path, f"{folder_name}_input.json")  # <-- (1) input JSON 경로도 준비
         output_file_path = os.path.join(folder_path, f"{folder_name}_output.json")
         
         if os.path.exists(output_file_path):
             try:
                 with open(output_file_path, 'r', encoding='utf-8') as f:
                     output_data = json.load(f)
+                    # (2) hyperparameter용 데이터를 저장할 변수
+                    hyperparams_data = {}
+
+                    # (3) input.json 파일이 있으면 로드
+                    if os.path.exists(input_file_path):
+                        try:
+                            with open(input_file_path, 'r', encoding='utf-8') as fin:
+                                hyperparams_data = json.load(fin)
+                        except Exception as e:
+                            print(f"Error reading {input_file_path}: {e}")
+                            hyperparams_data = {}
                     results.append({
                         'mode': output_data.get('mode'),
                         'timestamp': output_data.get('timestamp'),
@@ -1008,6 +1049,7 @@ def get_training_results():
                         'configurations': output_data.get('configurations'),
                         'best_config': output_data.get('best_config'),
                         'best_pred': output_data.get('best_pred'),
+                        'hyperparameter': hyperparams_data
                     })
             except Exception as e:
                 print(f"Error reading {output_file_path}: {e}")
