@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
 import sys
 import torch
 import torch.nn as nn
@@ -21,8 +27,20 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.linear_model import HuberRegressor
 from sklearn.gaussian_process import GaussianProcessRegressor
 
-def run(data, models, model_list, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
-        num_cadidates, escape, top_k, index, up, alternative):
+
+
+# print("torch", torch.__version__)
+# print("numpy", torch.__version__)
+# print("pandas", torch.__version__)
+# print("xgboost", xgboost.__version__)
+# print("sklearn", sklearn.__version__)
+
+
+
+
+
+def parameter_prediction(data, models, model_list, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
+        num_candidates, escape, top_k, index, up, alternative):
     
     neural_list = ['MLP','Conv']
 
@@ -80,7 +98,6 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                   'ATT13' : [5, min(data.iloc[:,12+1]), max(data.iloc[:,12+1]), int, 0, 100],
                   'ATT14' : [60, min(data.iloc[:,13+1]), max(data.iloc[:,13+1]), int, -1, 1800],
                   'ATT15' : [1000, min(data.iloc[:,14+1]), max(data.iloc[:,14+1]), int, 0, 2000]}
-    # 항상 15개 컬럼이 아니니까 수정할 것
 
     starting_point = pd.DataFrame(np.array(starting_point).reshape(1,-1), columns = [f'ATT{i+1}' for i in range(input_size)])
     erase = []
@@ -476,7 +493,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             return [configuration], prediction, configuration, prediction
         
     class GlobalMode(UNIVERSE):
-        def __init__(self, desired, models, modeling, strategy, tolerance = configuration_tolerance, steps = configuration_steps):
+        def __init__(self, desired, models, modeling, strategy, tolerance = configuration_tolerance, num_candidates =num_candidates,steps = configuration_steps):
             super().__init__()
             self.desired = desired
             self.y_prime = self.desired / (target.max[0] - target.min[0])
@@ -485,6 +502,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.strategy = strategy
             self.tolerance = tolerance / (target.max[0] - target.min[0])
             self.steps = steps
+            self.num_candidates = num_candidates  # num_candidates 초기화
             for model in models : 
                 try: model.train()
                 except: pass
@@ -577,7 +595,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                #         order = np.argsort(abs(gradient_avg))
                #     else :
                #         order = np.argsort(abs(gradient_avg))[::-1]
-                    order = np.argsort(abs(gradient_avg))[::-1]
+                    order = np.random.permutation(np.argsort(abs(gradient_avg))[::-1])
                     beam = order[:self.beam_width]
 
                     for b in beam:
@@ -660,8 +678,8 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 prediction_original = target.denormalize(prediction_avg)
                 prediction_original = prediction_original[0]
                 
-                prediction_original_all = target.denormalize(predictions_all)
-                prediction_original_all = prediction_original_all
+             #   prediction_original_all = target.denormalize(predictions_all)
+             #   prediction_original_all = prediction_original_all
                 
                 if configuration_show_steps and step % 10 == 0 and step != 0:
                     print(f"Step {step} Target : {self.desired}, Prediction : {prediction_original}")
@@ -669,7 +687,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 self.stochastic_chosen.append(chosen)    
                 self.stochastic_predictions.append(prediction_original)
                 self.stochastic_configurations.append(configuration)
-                self.stochastic_predictions_all.append(predicion)
+            #    self.stochastic_predictions_all.append(prediction_original_all)
 
                 if abs(prediction_avg - y_prime) < tolerance: break
             best = np.argsort(np.array(self.stochastic_predictions)-self.desired)[0]
@@ -756,7 +774,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
         
     configurations, predictions, best_config, best_pred = None, None, None, None
     if mode == 'global' :
-        G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
+        G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy, num_candidates=num_candidates)
         if strategy == 'beam':
             configurations, predictions, best_config, best_pred = G.beam(starting_point = starting_point,
                                                                  beam_width = beam_width)
@@ -779,3 +797,54 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
         
         
     return models, training_losses, configurations, predictions, best_config, best_pred, erase
+
+
+# In[197]:
+
+
+"""
+
+[입력]
+
+    (pd.DataFrame) data
+    (list) models (모델 재이용이 아닌 경우 : None, 재이용하는 경우 리스트 안에 model들 담아서)
+    (list) model_list  (e.g., model_list = ['MLP()',"ML_XGBoost()",'MLP(n_layers = 2)', 'MLP(n_layers = 3)', 
+                       "ML_XGBoost()","ML_LinearRegressor()", "ML_Ridge()", "ML_Lasso()",
+                       "ML_DecisionTreeRegressor()",  "ML_RandomForestRegressor()", "ML_GradientBoostingRegressor()",
+                       "ML_SVR()", "ML_KNeighborsRegressor()", "ML_HuberRegressor()", "ML_GaussianProcessRegressor()" ])
+                       
+    (str) mode : {'global', 'local'}
+    (str) modeling : {'single', 'averaging', 'ensemble'} # ensemble pending
+    (str) strategy : {'beam', 'stochastic', 'best_one', 'exhaustive', 'manual', 'sensitivity'} # sensitivity pending
+    
+    (list) starting_point : 시작점
+    
+    (float) desired : 찾고자하는 목표값
+    (float) tolerance : Global 모드에서 오차허용범위
+    (int) beam_width : beam 전략에서 
+    (int) num_cadidates : stochastic 전략에서 후보 개수
+    (bool) escape : best_one 전략에서 escape 옵션 사용할 것인지 여부
+    (int) top_k : exhaustive 전략에서 alternative로 keep_up_down 선택 시 몇 개 feature를 고려할 것인지
+    (str) alternative : exhaustive 전략에서 대안 {'up_down','keep_move', 'keep_up_down'}
+    (int) index : manual 전략에서 몇번쨰 feature를 움직일 것인지
+    (bool) up : manual 전략에서 feature를 올릴 것인지 (False이면 낮춤)
+
+[출력]
+    
+    (list) models
+    (list) training_losses : 회귀모델 훈련 로스
+    (list) configurations : 입력값 리스트
+    (list) predictions : 예측값 리스트
+    (list) best_config : 최고 입력값 리스트
+    (float) best_pred : 최고 예측값
+    
+                       
+"""
+
+
+# In[198]:
+
+
+
+
+

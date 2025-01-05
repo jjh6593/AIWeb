@@ -2,13 +2,14 @@ from flask import Flask, request, jsonify, send_from_directory, render_template,
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 import os, datetime
 import random
+from sklearn.preprocessing import MinMaxScaler
 import math
 import pandas as pd
 import mimetypes
 import pickle
 import json
 from model import create_model
-# from data_preprocessing import MinMaxScaling
+
 import joblib
 from data_utils import load_data, save_data, preprocess_data, get_columns, get_data_preview
 # 전역에서 PyTorch와 관련 모듈 임포트
@@ -21,8 +22,9 @@ import time
 from sklearn.metrics import mean_squared_error
 from train import train_pytorch_model, train_sklearn_model
 import logging
-from traking import run
+from traking2 import parameter_prediction
 import shutil
+
 # 디버깅 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
@@ -294,40 +296,86 @@ def save_model():
     # 폴더 생성
     
     model_path = os.path.join(save_dir, f"{model_name}.pt" if isinstance(model, torch.nn.Module) else f"{model_name}.pkl")
-    metadata_path = os.path.join(save_dir, f"{model_name}.json")
+    modeldata_path = os.path.join(save_dir, f"{model_name}.json")
     creation_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 데이터 전처리
+    '''-----------------------------제약 조건에 따라서 모델 생성 ------------------------------'''
+    # (2) 메타데이터 로드 & constraints 생성
+    metadata_path = os.path.join(METADATA_FOLDER, f"{csv_filename}_metadata.json")
+    with open(metadata_path, 'r', encoding='utf-8') as f:
+        metadata_list = json.load(f)
+    
+    # constraints 구성
+    constraints = {}
+    for item in metadata_list:
+        col_name = item['column']       # "att1" 등
+        unit_val = float(item['unit'])  # 5, 0.5 등
+        min_val  = float(item['min'])   # 예: 0
+        max_val  = float(item['max'])   # 예: 100
+        # 임의로 결정한 타입, 반올림 자릿수
+        # 실제는 item에 "type" / "round_digits"가 있으면 거기서 그대로 읽어도 됨
+        dtype_val = float if not float(unit_val).is_integer() else int
+        round_digits = 2 if dtype_val == float else 0
+
+        constraints[col_name] = [unit_val, min_val, max_val, dtype_val, round_digits]
+
+    
+    # ---------------------------
+    # (2) 결측치 처리, X / y 분리
+    # ---------------------------
     df = df.fillna(0)
-    # 여기서 X, y를 정의
-    X = df.drop(columns=[target_column])
-    y = df[target_column]
-
-    # 사이킷런 MinMaxScaler 사용
-    from sklearn.preprocessing import MinMaxScaler
-
-    scaler_X = MinMaxScaler()
-    scaler_y = MinMaxScaler()
-
-    # X와 y를 numpy 형태로 변환하여 fit_transform
-    X = X.to_numpy()  # DataFrame -> Numpy array
-    y = y.to_numpy().reshape(-1, 1)  # y를 2D array로
-    print(X.shape, y.shape)
-    # 스케일링 적용
-    X_scaled = scaler_X.fit_transform(X)
-    y_scaled = scaler_y.fit_transform(y).flatten()
-
-    # 데이터 분할
+    X_df = df.drop(columns=[target_column])
+    y_df = df[[target_column]]  # 2D
+    print(X_df.shape)
+    scaler_X = MinMaxScaling(data=X_df, constraints=constraints)  # dtype = torch.float32(기본값)
+    X_scaled = scaler_X.data.detach().numpy()  # (N, D) numpy
+    scaler_y = MinMaxScaler()  
+    y_scaled = scaler_y.fit_transform(y_df).flatten()
+    
+     # ---------------------------
+    # (4) 데이터 분할
+    # ---------------------------
     X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_scaled, test_size=val_ratio, random_state=42)
 
-    # feature, target을 np.array 또는 torch.tensor 형태로 변환
-    # Sklearn 모델: np.array 그대로 사용
-    # Pytorch 모델: tensor로 바꾸는 건 _train_nn 내부에서 할 수도 있음
+    # feature, target을 np.array 또는 torch.tensor 형태로 변환 (기존 로직 그대로)
     X_train_np = X_train
-    y_train_np = y_train.reshape(-1,1)
+    y_train_np = y_train.reshape(-1, 1)
     X_val_np = X_val
-    y_val_np = y_val.reshape(-1,1)
+    y_val_np = y_val.reshape(-1, 1)
     print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
+    # # 데이터 전처리
+    # df = df.fillna(0)
+    # # 여기서 X, y를 정의
+    # X = df.drop(columns=[target_column])
+    # y = df[target_column]
+
+    # # # 사이킷런 MinMaxScaler 사용
+    
+
+    # scaler_X = MinMaxScaler()
+    # scaler_y = MinMaxScaler()
+    
+    # # X와 y를 numpy 형태로 변환하여 fit_transform
+    # X = X.to_numpy()  # DataFrame -> Numpy array
+    # y = y.to_numpy().reshape(-1, 1)  # y를 2D array로
+    # print(X.shape, y.shape)
+    # # 스케일링 적용
+    # X_scaled = scaler_X.fit_transform(X)
+    # y_scaled = scaler_y.fit_transform(y).flatten()
+
+    # # 데이터 분할
+    # X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_scaled, test_size=val_ratio, random_state=42)
+
+    # # feature, target을 np.array 또는 torch.tensor 형태로 변환
+    # # Sklearn 모델: np.array 그대로 사용
+    # # Pytorch 모델: tensor로 바꾸는 건 _train_nn 내부에서 할 수도 있음
+    # X_train_np = X_train
+    # y_train_np = y_train.reshape(-1,1)
+    # X_val_np = X_val
+    # y_val_np = y_val.reshape(-1,1)
+    # print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
+
+
     # 모델 학습
     try:
         #print("모델 학습 시작...")
@@ -358,7 +406,7 @@ def save_model():
     try:
         if isinstance(model, torch.nn.Module):
             # PyTorch 모델
-            loaded_model = create_model(...)  # 모델 구조 생성
+            loaded_model = create_model(model_selected, input_size, hyperparams=hyperparams)  # 모델 구조 생성
             loaded_model.load_state_dict(torch.load(model_path))
             print(f"PyTorch 모델 로드 성공: {loaded_model}")
         else:
@@ -386,12 +434,6 @@ def save_model():
     train_pred_inv = scaler_y.inverse_transform(train_predictions.reshape(-1, 1)).flatten()
     val_pred_inv = scaler_y.inverse_transform(val_predictions.reshape(-1, 1)).flatten() if val_predictions is not None else None
 
-
-    def rae(y_true, y_pred):
-        numerator = np.sum(np.abs(y_pred - y_true))
-        denominator = np.sum(np.abs(y_true - np.mean(y_true)))
-        return numerator / denominator if denominator != 0 else np.nan
-
     train_mse = mean_squared_error(y_train_np, train_predictions)
     train_rmse = np.sqrt(train_mse)
     train_rae = rae(y_train_np, train_predictions)
@@ -403,13 +445,17 @@ def save_model():
     else:
         val_mse = val_rmse = val_rae = None
 
-    # 비정규화 (y 값만 역변환)
+    # # 비정규화 (y 값만 역변환)
     y_train_inv = scaler_y.inverse_transform(y_train_np)
     y_val_inv = scaler_y.inverse_transform(y_val_np) if y_val_np is not None else None
+    # y 자체도 역정규화
+    # y_train_inv = scaler_y.denormalize(y_train_np).flatten()
+    # y_val_inv = scaler_y.denormalize(y_val_np).flatten() if y_val_np is not None else None
+
     if model_type =='pytorch':
         train_pred_inv = scaler_y.inverse_transform(train_predictions.reshape(-1,1)).flatten()
         val_pred_inv = scaler_y.inverse_transform(val_predictions.reshape(-1,1)).flatten() if val_predictions is not None else None
-
+        
     if y_train_inv is not None:
         train_mse_inv = mean_squared_error(y_train_inv, train_pred_inv)
         train_rmse_inv = np.sqrt(train_mse_inv)
@@ -458,7 +504,7 @@ def save_model():
     }
 
     try:
-        with open(metadata_path, 'w', encoding='utf-8') as f:
+        with open(modeldata_path, 'w', encoding='utf-8') as f:
             json.dump(model_info, f, ensure_ascii=False, indent=4)
     except Exception as e:
         return jsonify({'status': 'error', 'message': f"메타데이터 저장 중 오류 발생: {str(e)}"}), 500
@@ -803,7 +849,8 @@ def submit_prediction():
         print(strategy)
         tolerance = data.get('tolerance', None)
         beam_width = data.get('beam_width', None)
-        num_candidates = data.get('num_candidates', 5)
+        num_candidates = data.get('num_candidates', None)
+        print(f"num_candidates = {num_candidates}")
         escape = data.get('escape', True)
         top_k = data.get('top_k', 2)
         index = data.get('index', 0)
@@ -900,11 +947,19 @@ def submit_prediction():
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
-
-        # models, training_losses, configurations, predictions, best_config, best_pred = run(
+        models, training_losses, configurations, predictions, best_config, best_pred, erase = run(data = data, models = models,
+                                                                                  model_list = model_list, desired = desired,
+                                                                                  starting_point = starting_point, 
+                                                                                  mode = mode, modeling = modeling,
+                                                                                  strategy = strategy, tolerance = tolerance, 
+                                                                                  beam_width = beam_width,
+                                                                                  num_cadidates = num_candidates, escape = escape, 
+                                                                                  top_k = top_k, index = index,
+                                                                                  up = up, alternative = alternative)
+        # models, training_loss,configurations, predictions, best_config, best_pred = parameter_prediction(
         #     data=df,  # DataFrame
-        #     models=models,
-        #     model_list=model_list,
+        #     models=models_list,
+        #     model_list=None,
         #     desired=float(desired),  # 실수형으로 변환
         #     starting_point=[float(value) for value in data['starting_points'].values()],  # 숫자 리스트로 변환
         #     mode=mode,
@@ -912,7 +967,7 @@ def submit_prediction():
         #     strategy=strategy.lower(),
         #     tolerance=float(tolerance) if tolerance is not None else None,  # 실수형 변환
         #     beam_width=int(beam_width) if beam_width is not None else None,
-        #     num_cadidates=int(num_candidates),
+        #     num_candidates=int(num_candidates),
         #     escape=bool(escape),
         #     top_k=int(top_k),
         #     index=int(index),
@@ -926,66 +981,66 @@ def submit_prediction():
         # 입력 데이터에도 날짜정보 추가
         data['timestamp'] = timestamp
 
-        # option에 따라 50개(global) 혹은 10개(local) 생성
-        n_points = 50 if data['option'] == 'global' else 10
+        # # option에 따라 50개(global) 혹은 10개(local) 생성
+        # n_points = 50 if data['option'] == 'global' else 10
 
-        # 입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
-        var_keys = sorted(data['starting_points'].keys())
+        # # 입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
+        # var_keys = sorted(data['starting_points'].keys())
 
-        # configurations & predictions 초기화
-        configurations = []
-        predictions = []
+        # # configurations & predictions 초기화
+        # configurations = []
+        # predictions = []
 
-        # 정규분포 생성을 위한 임시 표준편차(예시): 입력값 생성용 stdev=1.0, 예측값 생성용 stdev=10.0
-        stdev_for_config = 1.0
-        stdev_for_pred = 10.0
+        # # 정규분포 생성을 위한 임시 표준편차(예시): 입력값 생성용 stdev=1.0, 예측값 생성용 stdev=10.0
+        # stdev_for_config = 1.0
+        # stdev_for_pred = 10.0
 
-        target_value = float(data['desire'])
+        # target_value = float(data['desire'])
 
-        # (1) configurations 생성
-        for _ in range(n_points):
-            row = []
-            for var in var_keys:
-                start_val = float(data['starting_points'][var])
-                unit_val = units_map.get(var, 5.0)  # 혹시 없다면 5로 fallback
-                # 정규분포에서 샘플
-                sampled = random.gauss(start_val, stdev_for_config)
-                # unit단위 반올림
-                if unit_val != 0:
-                    sampled = round(sampled / unit_val) * unit_val
-                row.append(sampled)
-            configurations.append(row)
+        # # (1) configurations 생성
+        # for _ in range(n_points):
+        #     row = []
+        #     for var in var_keys:
+        #         start_val = float(data['starting_points'][var])
+        #         unit_val = units_map.get(var, 5.0)  # 혹시 없다면 5로 fallback
+        #         # 정규분포에서 샘플
+        #         sampled = random.gauss(start_val, stdev_for_config)
+        #         # unit단위 반올림
+        #         if unit_val != 0:
+        #             sampled = round(sampled / unit_val) * unit_val
+        #         row.append(sampled)
+        #     configurations.append(row)
 
-        # (2) predictions 생성
-        #    Target값을 중심으로 정규분포 샘플링해서 n_points 개 생성
-        for _ in range(n_points):
-            pred = random.gauss(target_value, stdev_for_pred)
-            predictions.append(pred)
+        # # (2) predictions 생성
+        # #    Target값을 중심으로 정규분포 샘플링해서 n_points 개 생성
+        # for _ in range(n_points):
+        #     pred = random.gauss(target_value, stdev_for_pred)
+        #     predictions.append(pred)
 
-        # (3) best_config / best_pred 찾기
-        #    각 predictions에 대해 Target과의 차(diffs) 계산
-        diffs = [abs(p - target_value) for p in predictions]
+        # # (3) best_config / best_pred 찾기
+        # #    각 predictions에 대해 Target과의 차(diffs) 계산
+        # diffs = [abs(p - target_value) for p in predictions]
 
-        if data['option'] == 'local':
-            # local인 경우: (config, pred, diff)를 하나의 튜플로 묶어서 오름차순 정렬 후 반환
-            combined = list(zip(configurations, predictions, diffs))
-            combined.sort(key=lambda x: x[2])  # diff 기준 정렬
+        # if data['option'] == 'local':
+        #     # local인 경우: (config, pred, diff)를 하나의 튜플로 묶어서 오름차순 정렬 후 반환
+        #     combined = list(zip(configurations, predictions, diffs))
+        #     combined.sort(key=lambda x: x[2])  # diff 기준 정렬
 
-            # 정렬된 결과를 다시 분리
-            configurations = [c[0] for c in combined]
-            predictions = [c[1] for c in combined]
-            diffs_sorted = [c[2] for c in combined]
+        #     # 정렬된 결과를 다시 분리
+        #     configurations = [c[0] for c in combined]
+        #     predictions = [c[1] for c in combined]
+        #     diffs_sorted = [c[2] for c in combined]
 
-            # 가장 앞(오차가 작은) 것이 best
-            best_idx = 0
-            best_config = configurations[best_idx]
-            best_pred = predictions[best_idx]
+        #     # 가장 앞(오차가 작은) 것이 best
+        #     best_idx = 0
+        #     best_config = configurations[best_idx]
+        #     best_pred = predictions[best_idx]
 
-        else:
-            # global인 경우: 정렬 없이, 오차가 가장 적은 인덱스를 찾는다
-            best_idx = min(range(n_points), key=lambda i: diffs[i])
-            best_config = configurations[best_idx]
-            best_pred = predictions[best_idx]
+        # else:
+        #     # global인 경우: 정렬 없이, 오차가 가장 적은 인덱스를 찾는다
+        #     best_idx = min(range(n_points), key=lambda i: diffs[i])
+        #     best_config = configurations[best_idx]
+        #     best_pred = predictions[best_idx]
         output_data = {
             'mode': data['option'],
             'timestamp': timestamp,  # output에도 동일 날짜 정보
@@ -1154,6 +1209,145 @@ class EarlyStopping:
             self.best_score = score
             self.counter = 0
             self.train_loss_min = train_loss
+def load_constraints_from_metadata(csv_filename):
+    """
+    csv_filename: 예) "mydata.csv" (확장자 포함)
+                  -> 메타데이터 파일 이름은 "mydata.csv_metadata.json" 이라 가정
 
+    메타데이터 JSON 예시:
+    [
+      {
+        "column": "att1",
+        "unit": 5,
+        "min": 0,
+        "max": 100
+      },
+      {
+        "column": "att2",
+        "unit": 10,
+        "min": -5,
+        "max": 50
+      }
+    ]
+    """
+
+    # 메타데이터 파일 경로
+    metadata_path = os.path.join(METADATA_FOLDER, f"{csv_filename}_metadata.json")
+
+    if not os.path.exists(metadata_path):
+        raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
+
+    with open(metadata_path, 'r', encoding='utf-8') as f:
+        metadata_list = json.load(f)
+
+    # constraints를 담을 딕셔너리
+    constraints = {}
+
+    # 예) round_digits를 어떻게 설정할지 미리 정하거나, 메타데이터에 추가 필드가 있다면 거기서 읽어올 수도 있음
+    # 여기서는 "float형이면 round_digits=2, int형이면 round_digits=0" 같은 식으로 단순 예시
+    # 혹은 column 이름에 따라 결정할 수도 있음
+    def infer_type_and_digits(column_name, unit_val):
+        # 예시: unit값이 정수이면 int, 아니면 float로 가정
+        if float(unit_val).is_integer():
+            return int, 0  # (타입, 반올림 자릿수=0)
+        else:
+            return float, 2  # (타입, 반올림 자릿수=2)
+
+    for item in metadata_list:
+        col_name = item['column']      # 예: "att1"
+        col_unit = float(item['unit']) # 메타데이터에 저장된 unit
+        col_min  = float(item['min'])
+        col_max  = float(item['max'])
+
+        # 타입과 반올림 자릿수를 임의 규칙(혹은 추가 메타데이터)에 따라 결정
+        inferred_type, round_digits = infer_type_and_digits(col_name, col_unit)
+
+        # 이제 [단위값, min, max, 타입, 반올림자릿수] 형태로 constraints 구성
+        constraints[col_name] = [col_unit, col_min, col_max, inferred_type, round_digits]
+
+    return constraints
+
+class MinMaxScaling:
+    """
+    data: 스케일링 대상 (DataFrame 또는 ndarray)
+    constraints: 메타데이터 기반으로 만든 컬럼별 [단위, min, max, dtype, round_digits] 사전
+                 -> 여기서는 'column' 개념이 없을 수도 있으므로, 인덱스 순서대로 사용하거나
+                    혹은 data가 DataFrame이면 columns 매핑이 필요.
+    dtype: torch.float32 등
+    """
+
+    def __init__(self, data, constraints, dtype=torch.float32):
+        self.constraints = constraints  # 외부에서 받은 constraints
+        self.dtype = dtype
+
+        self.max, self.min, self.range = [], [], []
+        self.data = pd.DataFrame([])
+
+        # data가 DataFrame이면 .values, 1D면 reshape 등
+        if isinstance(data, pd.DataFrame):
+            data = data.values
+        data = data.reshape(-1, 1) if len(data.shape) == 1 else data
+
+        epsilon = 2
+        for i in range(data.shape[1]):
+            col_data = data[:, i]
+            max_ = col_data.max()
+            min_ = col_data.min()
+            if max_ == min_:
+                max_ *= epsilon
+
+            self.max.append(max_)
+            self.min.append(min_)
+            self.range.append(max_ - min_)
+
+            scaled_col = (col_data) / (max_ - min_)
+            self.data = pd.concat([self.data, pd.DataFrame(scaled_col)], axis=1)
+
+        # 최종적으로 torch.tensor에 저장
+        self.data = torch.tensor(self.data.values, dtype=self.dtype)
+
+    def denormalize(self, data):
+        """
+        data: 스케일링된 1D/2D numpy array or torch.Tensor
+        -> 각 index별로 self.max[i], self.min[i]를 사용
+        -> 그리고 self.constraints를 이용해 round 자릿수 결정
+        """
+        # data가 torch.Tensor이면 numpy로 변환
+        data = data.detach().numpy() if isinstance(data, torch.Tensor) else data
+
+        # 만약 columns(컬럼명) 단위 매핑이 필요한 경우, 별도 로직 필요.
+        # 지금 예시는 "인덱스 순서"로만 constraints를 매핑한다고 가정(주의).
+        #  (즉, constraints가 key가 아니라 list 형태로 관리된다고 치거나,
+        #   혹은 인덱스 순서대로 [att1, att2, ...] 라고 가정)
+
+        new_data = []
+        for i, element in enumerate(data):
+            # 역정규화
+            element = element * (self.max[i] - self.min[i]) + 0  # + min[i]? (기존 코드엔 +min이 생략되어있을 수도 있음)
+            # round 자릿수
+            # ex) round_digits = self.constraints[some_key][4] ...
+            # 여기서는 단순히 i번째 constraint를 가져온다고 가정.
+            # constraints = { 'att1': [...], 'att2': [...] } 이면 list로 전환해서 i번째를 찾거나
+            # index가 'col_name'과 매칭되는지 별도 관리가 필요함
+            # 예: 
+            # constraints_list = list(self.constraints.values()) 
+            # round_digits = constraints_list[i][4]
+            # element = round(element, round_digits)
+
+            # (혹은, 만약 인덱스/컬럼 매핑을 명시적으로 해야 한다면, 
+            #  init에서 data.columns 순서대로 constraints를 저장한 리스트를 만들어둬야 합니다.)
+            # 아래는 "i번째 constraint"라고 가정한 예시:
+            constraints_list = list(self.constraints.values())
+            round_digits = constraints_list[i][4]
+            
+            element = round(element, round_digits)
+            new_data.append(element)
+        return np.array(new_data).flatten()
+
+
+def rae(y_true, y_pred):
+        numerator = np.sum(np.abs(y_pred - y_true))
+        denominator = np.sum(np.abs(y_true - np.mean(y_true)))
+        return numerator / denominator if denominator != 0 else np.nan
 if __name__ == '__main__':
     app.run(debug=True)

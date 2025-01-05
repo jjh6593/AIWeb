@@ -1,27 +1,3 @@
-import sys
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import time  
-import random
-import xgboost
-import sklearn
-from itertools import product
-from itertools import chain
-
-#from tqdm import tqdm
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.svm import SVR
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.linear_model import HuberRegressor
-from sklearn.gaussian_process import GaussianProcessRegressor
-
-
 def run(data, models, model_list, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
         num_cadidates, escape, top_k, index, up, alternative):
     
@@ -132,11 +108,11 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
            #     self.layers_dropout += [nn.Dropout(regression_dropout) for _ in range(n_layers - 1)]
 
             self.last_layer = nn.Linear(hidden_size, output_size)
-          #  self.dropout_input = nn.Dropout(regression_dropout)
+            self.dropout_input = nn.Dropout(regression_dropout)
 
         def forward(self, x):
             x = torch.relu(self.first_layer(x))
-        #    x = self.dropout_input(x)
+            x = self.dropout_input(x)
             for i in range(len(self.layers)):
                 layer = self.layers[i]
            #     drop = self.layers_dropout[i]
@@ -240,10 +216,10 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
         trained_models = []
         all_training_losses = []
         for i, model in enumerate(models):
-            if any([m in model_list[i] for m in neural_list]): 
+            try: 
                 training_losses = _train_nn(model, feature, target)
                 all_training_losses.append(training_losses)
-            else: 
+            except: 
                 _train_ml(model, feature, target)
                 all_training_losses.append(None)
             trained_models.append(model)
@@ -302,14 +278,14 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             copy = x.clone()
             for i, model in enumerate(models):
                 x = x.clone().detach().requires_grad_(True)
-                if any([m in model_list[i] for m in neural_list]): 
+                try: 
                     prediction = model(x)
                     loss = abs(prediction - y_prime)
                     loss.backward()
                     gradient = x.grad.detach().numpy()
                     prediction = prediction.detach().numpy()
 
-                else: # ML
+                except: # ML
                     x = x.detach().numpy().reshape(1,-1)
                     prediction = model.predict(x)
                     if fake_gradient :
@@ -486,7 +462,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.tolerance = tolerance / (target.max[0] - target.min[0])
             self.steps = steps
             for model in models : 
-                try: model.eval()
+                try: model.train()
                 except: pass
                 self.models.append(model)
 
@@ -496,14 +472,14 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             copy = x.clone()
             for i, model in enumerate(models):
                 x = x.clone().detach().requires_grad_(True)
-                if any([m in model_list[i] for m in neural_list]): 
+                try: 
                     prediction = model(x)
                     loss = prediction - y_prime
                     loss.backward()
                     gradient = x.grad.detach().numpy()
                     prediction = prediction.detach().numpy()
 
-                else: # ML
+                except: # ML
                     x = x.detach().numpy().reshape(1,-1)
                     prediction = model.predict(x)
                     gradient = []
@@ -577,7 +553,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                #         order = np.argsort(abs(gradient_avg))
                #     else :
                #         order = np.argsort(abs(gradient_avg))[::-1]
-                    order = np.argsort(abs(gradient_avg))[::-1]
+                    order = np.random.permutation(np.argsort(abs(gradient_avg))[::-1])
                     beam = order[:self.beam_width]
 
                     for b in beam:
@@ -635,6 +611,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.stochastic_chosen = []
             self.stochastic_predictions = []
             self.stochastic_configurations = []
+            self.stochastic_predictions_all = []
 
             for step in range(self.steps):
                 configuration = feature.denormalize(x_prime)
@@ -658,14 +635,17 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
 
                 prediction_original = target.denormalize(prediction_avg)
                 prediction_original = prediction_original[0]
-
-
+                
+             #   prediction_original_all = target.denormalize(predictions_all)
+             #   prediction_original_all = prediction_original_all
+                
                 if configuration_show_steps and step % 10 == 0 and step != 0:
                     print(f"Step {step} Target : {self.desired}, Prediction : {prediction_original}")
 
                 self.stochastic_chosen.append(chosen)    
                 self.stochastic_predictions.append(prediction_original)
                 self.stochastic_configurations.append(configuration)
+            #    self.stochastic_predictions_all.append(prediction_original_all)
 
                 if abs(prediction_avg - y_prime) < tolerance: break
             best = np.argsort(np.array(self.stochastic_predictions)-self.desired)[0]
@@ -756,9 +736,10 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
         if strategy == 'beam':
             configurations, predictions, best_config, best_pred = G.beam(starting_point = starting_point,
                                                                  beam_width = beam_width)
+            
         elif strategy == 'stochastic':
             configurations, predictions, best_config, best_pred = G.stochastic(starting_point = starting_point,
-                                                                 num_candidates = num_cadidates)
+                                                                 num_candidates = num_candidates)
             
         elif strategy == 'best_one':
              configurations, predictions, best_config, best_pred = G.best_one(starting_point = starting_point, 
@@ -773,4 +754,5 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             configurations, predictions, best_config, best_pred = L.manual(starting_point = starting_point, index = index, up = up)
         
         
-    return models, training_losses, configurations, predictions, best_config, best_pred
+    return models, training_losses, configurations, predictions, best_config, best_pred, erase
+
