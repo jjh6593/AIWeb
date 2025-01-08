@@ -859,9 +859,36 @@ def submit_prediction():
         index = data.get('index', 0)
         up = data.get('up', 0)
         alternative = data.get('alternative', 'keep_move')
-        
+        # ============================
+        # 기존 제약조건 가져오기
+        # ============================
+        metadata_path = os.path.join(METADATA_FOLDER, f"{data['filename']}_metadata.json")
 
-       
+        if not os.path.exists(metadata_path):
+            raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
+
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata_list = json.load(f)
+        # 변환할 딕셔너리 초기화
+        units = {}
+        max_boundary = {}
+        min_boundary = {}
+
+        # 각 metadata 항목을 순회하며, column명을 key로 하여 value를 저장
+        for item in metadata_list:
+            col = item["column"]
+            units[col] = item["unit"]
+            max_boundary[col] = item["max"]
+            min_boundary[col] = item["min"]
+
+        # 최종 구조
+        combined_metadata = {
+            "units": units,
+            "max_boundary": max_boundary,
+            "min_boundary": min_boundary
+        }
+        print(combined_metadata)
+
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
         # ============================
