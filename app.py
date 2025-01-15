@@ -892,72 +892,72 @@ def submit_prediction():
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
         # ============================
-        # MODEL_FOLDER = 'models'
-        # models_list = []
+        MODEL_FOLDER = 'models'
+        models_list = []
 
-        # for model_name in data['models']:
-        #     model_dir = os.path.join(MODEL_FOLDER, model_name)
-        #     metadata_path = os.path.join(model_dir, f"{model_name}.json")
-        #     model_path = os.path.join(model_dir, f"{model_name}.pkl")
+        for model_name in data['models']:
+            model_dir = os.path.join(MODEL_FOLDER, model_name)
+            metadata_path = os.path.join(model_dir, f"{model_name}.json")
+            model_path = os.path.join(model_dir, f"{model_name}.pkl")
             
-        #     if not os.path.exists(metadata_path):
-        #         logging.error(f"No metadata found for model: {model_name}")
-        #         continue
+            if not os.path.exists(metadata_path):
+                logging.error(f"No metadata found for model: {model_name}")
+                continue
 
-        #     try:
-        #         # 메타데이터 로드
-        #         with open(metadata_path, 'r', encoding='utf-8') as f:
-        #             metadata = json.load(f)
+            try:
+                # 메타데이터 로드
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
 
-        #         framework = metadata.get('framework')
-        #         model_selected = metadata.get('model_selected')
-        #         hyperparams = metadata.get('parameters', {})
-        #         input_size = metadata.get('input_size', None)
-        #         model_path = ""
-        #         print(model_selected)
-        #         # framework에 따라 model_path 설정
-        #         if framework == 'sklearn':
-        #             model_path = os.path.join(model_dir, f"{model_name}.pkl")
-        #         elif framework == 'pytorch':
-        #             model_path = os.path.join(model_dir, f"{model_name}.pt")
-        #         else:
-        #             logging.error(f"Unsupported framework '{framework}' for model: {model_name}")
-        #             continue
-        #         if framework == 'sklearn':
-        #             # (1) pkl 파일이 존재하면 바로 불러오기
-        #             try:
-        #                 with open(model_path, 'rb') as pf:
-        #                     model = joblib.load(pf)
-        #                 print(f"모델 로드 성공 (pkl): {model}")
-        #             except Exception as e:
-        #                 logging.error(f"Error while loading model '{model_name}' from pkl: {e}")
-        #                 continue
+                framework = metadata.get('framework')
+                model_selected = metadata.get('model_selected')
+                hyperparams = metadata.get('parameters', {})
+                input_size = metadata.get('input_size', None)
+                model_path = ""
+                print(model_selected)
+                # framework에 따라 model_path 설정
+                if framework == 'sklearn':
+                    model_path = os.path.join(model_dir, f"{model_name}.pkl")
+                elif framework == 'pytorch':
+                    model_path = os.path.join(model_dir, f"{model_name}.pt")
+                else:
+                    logging.error(f"Unsupported framework '{framework}' for model: {model_name}")
+                    continue
+                if framework == 'sklearn':
+                    # (1) pkl 파일이 존재하면 바로 불러오기
+                    try:
+                        with open(model_path, 'rb') as pf:
+                            model = joblib.load(pf)
+                        print(f"모델 로드 성공 (pkl): {model}")
+                    except Exception as e:
+                        logging.error(f"Error while loading model '{model_name}' from pkl: {e}")
+                        continue
 
-        #         elif framework == 'pytorch':
-        #             # PyTorch 모델 로드 로직 (기존 그대로 유지)
-        #             model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
-        #             if not model:
-        #                 raise ValueError(f"PyTorch 모델 생성 실패: {model_name}")
-        #             print(f"PyTorch 모델 생성 성공: {model}")
+                elif framework == 'pytorch':
+                    # PyTorch 모델 로드 로직 (기존 그대로 유지)
+                    model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
+                    if not model:
+                        raise ValueError(f"PyTorch 모델 생성 실패: {model_name}")
+                    print(f"PyTorch 모델 생성 성공: {model}")
 
-        #             if os.path.isfile(model_path):
-        #                 state_dict = torch.load(model_path, map_location='cpu')
-        #                 model.load_state_dict(state_dict)
-        #                 print(f"PyTorch 모델 파라미터 로드 성공: {model}")
+                    if os.path.isfile(model_path):
+                        state_dict = torch.load(model_path, map_location='cpu')
+                        model.load_state_dict(state_dict)
+                        print(f"PyTorch 모델 파라미터 로드 성공: {model}")
 
-        #         else:
-        #             raise ValueError(f"지원되지 않는 프레임워크입니다: {framework}")
+                else:
+                    raise ValueError(f"지원되지 않는 프레임워크입니다: {framework}")
 
-        #         # 완성된 모델 리스트에 추가
-        #         models_list.append(model)
+                # 완성된 모델 리스트에 추가
+                models_list.append(model)
 
-        #     except Exception as e:
-        #         logging.error(f"Error while creating/loading model '{model_name}': {e}")
-        #         continue
+            except Exception as e:
+                logging.error(f"Error while creating/loading model '{model_name}': {e}")
+                continue
 
-        # print("모델 생성/로딩 완료:")
-        # for idx, m in enumerate(models_list):
-        #     print(f"{idx+1}. {m}")
+        print("모델 생성/로딩 완료:")
+        for idx, m in enumerate(models_list):
+            print(f"{idx+1}. {m}")
 
         # 파일 이름 생성
         print(data['save_name'])
@@ -975,15 +975,16 @@ def submit_prediction():
         # 동일한 폴더가 있으면 그대로 사용
         if not os.path.exists(subfolder_path):
             os.makedirs(subfolder_path)
+        model_list = []
         model_list = ['MLP()',"ML_XGBoost()"]#,""
         starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
 
 
         models = None # models = [model, model, model, ...]
         desired = 555
-        mode = 'global'
+        mode = 'local'
         modeling = 'averaging'
-        strategy = 'beam'
+        strategy = 'exhaustive'
         tolerance = 2
         beam_width = 5
         num_candidates = 5
@@ -1015,68 +1016,9 @@ def submit_prediction():
         # configurations = []
         # predictions = []
 
-        # # 정규분포 생성을 위한 임시 표준편차(예시): 입력값 생성용 stdev=1.0, 예측값 생성용 stdev=10.0
-        # stdev_for_config = 1.0
-        # stdev_for_pred = 10.0
-
         # target_value = float(data['desire'])
 
-        #         # 기본값 설정
-        # default_unit_val = 5.0  # units_map에서 값을 찾지 못하면 fallback
-        # default_start_val = 0.0  # starting_points가 없을 경우 기본값
-        # stdev_for_config = data.get('stdev_for_config', 1.0)  # 표준편차 기본값
-        # stdev_for_pred = data.get('stdev_for_pred', 1.0)  # 표준편차 기본값
-        # target_value = data.get('target_value', 0.0)  # Target 기본값
-
-        # # (1) configurations 생성
-        # for _ in range(n_points):
-        #     row = []
-        #     for var in var_keys:
-        #         # starting_points에서 값을 가져오거나 기본값 사용
-        #         start_val = float(data.get('starting_points', {}).get(var, default_start_val))
-        #         # units_map에서 값을 가져오거나 기본값 사용
-        #         unit_val = float(units_map.get(var, default_unit_val))
-
-        #         # 정규분포에서 샘플
-        #         sampled = random.gauss(start_val, stdev_for_config)
-        #         # unit 단위 반올림
-        #         if unit_val != 0:
-        #             sampled = round(sampled / unit_val) * unit_val
-        #         row.append(sampled)
-        #     configurations.append(row)
-
-        # # (2) predictions 생성
-        # #    Target 값을 중심으로 정규분포 샘플링해서 n_points 개 생성
-        # for _ in range(n_points):
-        #     pred = random.gauss(target_value, stdev_for_pred)
-        #     predictions.append(pred)
-
-        # # (3) best_config / best_pred 찾기
-        # #    각 predictions에 대해 Target과의 차(diffs) 계산
-        # diffs = [abs(p - target_value) for p in predictions]
-
-        # if data.get('option', 'local') == 'local':  # 기본값은 'local'
-        #     # local인 경우: (config, pred, diff)를 하나의 튜플로 묶어서 오름차순 정렬 후 반환
-        #     combined = list(zip(configurations, predictions, diffs))
-        #     combined.sort(key=lambda x: x[2])  # diff 기준 정렬
-
-        #     # 정렬된 결과를 다시 분리
-        #     configurations = [c[0] for c in combined]
-        #     predictions = [c[1] for c in combined]
-        #     diffs_sorted = [c[2] for c in combined]
-
-        #     # 가장 앞(오차가 작은) 것이 best
-        #     best_idx = 0
-        #     best_config = configurations[best_idx]
-        #     best_pred = predictions[best_idx]
-
-        # else:
-        #     # global인 경우: 정렬 없이, 오차가 가장 적은 인덱스를 찾는다
-        #     best_idx = min(range(n_points), key=lambda i: diffs[i])
-        #     best_config = configurations[best_idx]
-        #     best_pred = predictions[best_idx]
-
-
+    
         # models, training_loss,configurations, predictions, best_config, best_pred, erase = parameter_prediction(
         #     data=df,  # DataFrame
         #     models=models_list,
@@ -1132,6 +1074,198 @@ def submit_prediction():
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+'''---------------------------------------------Local 재탐색----------------------------------------------'''
+@app.route('/api/rerun_prediction', methods=['POST'])
+def rerun_prediction():
+    """
+    이미 존재하는 results 폴더(=outputs/폴더명)와 
+    새로운 starting_points 등을 받아서 다시 parameter_prediction 로직을 수행하는 API
+    """
+    try:
+        data = request.get_json()
+        if 'save_name' not in data:
+            return jsonify({'status': 'error', 'message': 'save_name이 누락되었습니다.'}), 400
+
+        save_name = data['save_name']
+        outputs_dir = 'outputs'
+        subfolder_path = os.path.join(outputs_dir, save_name)
+
+        # 기존 폴더 존재 여부 확인
+        if not os.path.exists(subfolder_path):
+            return jsonify({
+                'status': 'error', 
+                'message': f'해당 폴더({save_name})가 존재하지 않습니다.'
+            }), 400
+
+        # 기존 input.json 불러오기
+        input_json_path = os.path.join(subfolder_path, f"{save_name}_input.json")
+        if not os.path.exists(input_json_path):
+            return jsonify({
+                'status': 'error', 
+                'message': f'기존 input.json 파일이 {save_name} 폴더 안에 없습니다.'
+            }), 400
+
+        with open(input_json_path, 'r', encoding='utf-8') as f:
+            old_input_data = json.load(f)
+
+        # old_input_data에 들어있는 값과 새로 들어온 data를 합친다.
+
+        # 우선순위: 새 data 값 > old_input_data 값
+        # (기본적으로 old_input_data를 복사한 뒤, 새 data에 있는 키는 덮어쓴다)
+        combined_data = old_input_data.copy()
+        for key, val in data.items():
+            # 일부 key만 업데이트, 혹은 모든 key 업데이트 등 원하는 로직에 따라
+            combined_data[key] = val
+        
+        # 예: "starting_points"를 새로 받았으면 덮어씌우기
+        #     만약 "desire", "strategy" 등도 바꾸고 싶다면 동일한 방법으로 진행
+        combined_data['starting_points'] = data.get('starting_points', old_input_data.get('starting_points', {}))
+        
+        # combined_data['desire'] = float(data.get('desire', old_input_data.get('desire', 0.0)))
+        # ...
+
+        # 이제 combined_data를 기반으로 다시 모델 로딩, parameter_prediction 실행
+        # (아래 로직은 /api/submit_prediction 에 있는 것을 최대한 재활용)
+
+        # 1) filename, metadata, CSV 로드
+        filename = combined_data['filename']
+        data_file_path = os.path.join('uploads', filename)
+        if not os.path.exists(data_file_path):
+            return jsonify({'status': 'error', 'message': f'Data file not found: {filename}'}), 400
+
+        df = pd.read_csv(data_file_path).drop_duplicates()
+        
+        # 2) 메타데이터 로드
+        metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
+        if not os.path.exists(metadata_path):
+            return jsonify({
+                'status': 'error', 
+                'message': f'Metadata file not found for: {filename}'
+            }), 400
+
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            stored_metadata = json.load(f)
+
+        # (원하는 대로 min_boundary, max_boundary, unit 등 로드)
+        # ...
+
+        # 3) 모델 로딩 로직
+        models_list = []
+        MODEL_FOLDER = 'models'
+        for model_name in combined_data['models']:
+            # 기존 /api/submit_prediction 참조
+            model_dir = os.path.join(MODEL_FOLDER, model_name)
+            metadata_path = os.path.join(model_dir, f"{model_name}.json")
+            if not os.path.exists(metadata_path):
+                logging.warning(f"No metadata found for model: {model_name}")
+                continue
+
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                model_metadata = json.load(f)
+
+            framework = model_metadata.get('framework')
+            model_selected = model_metadata.get('model_selected')
+            hyperparams = model_metadata.get('parameters', {})
+            input_size = model_metadata.get('input_size', None)
+
+            if framework == 'sklearn':
+                model_path = os.path.join(model_dir, f"{model_name}.pkl")
+                if not os.path.isfile(model_path):
+                    continue
+                # 스켈런 모델 로드
+                model = joblib.load(model_path)
+                models_list.append(model)
+
+            elif framework == 'pytorch':
+                model_path = os.path.join(model_dir, f"{model_name}.pt")
+                # PyTorch 모델 생성 후 state_dict 로드...
+                model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
+                state_dict = torch.load(model_path, map_location='cpu')
+                model.load_state_dict(state_dict)
+                models_list.append(model)
+
+            else:
+                logging.warning(f"Unsupported framework: {framework}")
+
+        # 4) parameter_prediction 실행에 필요한 인자 셋팅
+        #    (원하는 로직에 맞게)
+        desired = float(combined_data['desire'])
+        starting_points = combined_data['starting_points']  # 예: dict 형태
+        strategy = combined_data['strategy']
+        modeling = combined_data['modeling_type']
+        mode = combined_data['option']  # local/global
+        tolerance = combined_data.get('tolerance', None)
+        beam_width = combined_data.get('beam_width', None)
+        num_candidates = combined_data.get('num_candidates', None)
+        escape = combined_data.get('escape', True)
+        top_k = combined_data.get('top_k', 2)
+        index = combined_data.get('index', 0)
+        up = combined_data.get('up', 0)
+        alternative = combined_data.get('alternative', 'keep_move')
+
+        # starting_points가 dictionary일 경우, 모델에 들어갈 때 list나 numpy 변환 등이 필요할 수 있음
+        # 예를 들어:
+        # sp_list = [float(v) for v in starting_points.values()]  # 순서주의
+
+        # 실제 parameter_prediction 호출
+        # (아래는 /api/submit_prediction 예시를 그대로 차용)
+        models, training_losses, configurations, predictions, best_config, best_pred, erase = parameter_prediction(
+            data=df,
+            models=None,  # 필요시
+            model_list=models_list,  # 혹은 models_list
+            desired=desired,
+            starting_point=[float(v) for v in starting_points.values()],
+            mode=mode,
+            modeling=modeling,
+            strategy=strategy,
+            tolerance=tolerance,
+            beam_width=beam_width,
+            num_candidates=num_candidates,
+            escape=escape,
+            top_k=top_k,
+            index=index,
+            up=up,
+            alternative=alternative
+        )
+
+        # 5) 결과 저장
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        combined_data['timestamp'] = timestamp
+
+        # 새로운 output.json 만들거나, 덮어쓰기
+        # 여기서는 버전 구분 위해 새 파일명에 timestamp를 붙임
+        new_output_file = os.path.join(subfolder_path, f"{save_name}_output_{timestamp}.json")
+
+        configurations = convert_to_python_types(configurations)
+        predictions = convert_to_python_types(predictions)
+        best_config = convert_to_python_types(best_config)
+        best_pred = convert_to_python_types(best_pred)
+
+        output_data = {
+            'mode': combined_data['option'],
+            'timestamp': timestamp,
+            'configurations': configurations,
+            'predictions': predictions,
+            'best_config': best_config,
+            'best_pred': best_pred,
+            'Target': combined_data['desire'],
+            'filename': combined_data['filename'],
+        }
+
+        # 새 input.json도 저장할지 여부 결정
+        # 여기서는 덮어쓰기 
+        new_input_file = os.path.join(subfolder_path, f"{save_name}_input.json")
+        with open(new_input_file, 'w', encoding='utf-8') as f:
+            json.dump(combined_data, f, ensure_ascii=False, indent=4)
+
+        with open(new_output_file, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=4)
+
+        return jsonify({'status': 'success', 'data': output_data}), 200
+
+    except Exception as e:
+        logging.error(f"An error occurred in rerun_prediction: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 '''---------------------------------------------학습 결과----------------------------------------------'''
