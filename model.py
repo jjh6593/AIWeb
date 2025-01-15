@@ -9,13 +9,14 @@ from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.gaussian_process import GaussianProcessRegressor
 torch.set_num_threads(1)  # 스레드 수를 1로 제한
+
 def create_model(model_selected, input_size=14, hyperparams=None):
     if hyperparams is None:
         hyperparams = {}
 
     # 지원되는 모델 목록 정의
     supported_models = {
-        'pytorch': ['MLP_1', 'MLP_2', 'MLP_3'],
+        'pytorch': ['MLP_1', 'MLP_2', 'MLP_3', 'MLP_dynamic'],
         'scikit': [
             'LinearRegressor', 'Ridge', 'Lasso', 'ElasticNet',
             'DecisionTreeRegressor', 'RandomForestRegressor', 'GradientBoostingRegressor',
@@ -30,12 +31,40 @@ def create_model(model_selected, input_size=14, hyperparams=None):
     # PyTorch 모델 생성
     if model_selected in supported_models['pytorch']:
         print(f"[DEBUG] Creating PyTorch model: {model_selected} with input size: {input_size}")
+
+        # ────────────── 핵심 부분 시작 ──────────────
+        # 만약 'hidden_size_1', 'hidden_size_2', ... 등을 동적으로 처리하고 싶다면:
+        hidden_layers = []
+
+        # 최대 3개(또는 필요하다면 4개, 5개...) 까지 루프
+        for i in range(1, 4):
+            key = f"hidden_size_{i}"
+            if key in hyperparams:
+                hidden_layers.append(int(hyperparams[key]))
+
+        # hidden_size_가 하나도 안 넘어온 경우, 기본값
+        if not hidden_layers:
+            hidden_layers = [32]  # ex) 기본값 1개 레이어, 32차원
+
+        # ────────────── 핵심 부분 끝 ──────────────
+
+        # 이제 model_selected가 'MLP_1', 'MLP_2', 'MLP_3' 인 경우와,
+        # 그냥 'MLP_dynamic' 등인 경우에 따라 분기
+        # (기존 MLP_1, MLP_2, MLP_3는 n_layers를 고정으로 넣어둔 예시 같으니,
+        #  실제로는 모두 MLPDynamic로 사용해도 되지만, 예시로 분기 처리)
         if model_selected == 'MLP_1':
-            return MLP(input_size=input_size)
+            # hidden_layers가 여러개라도, 강제로 1개만 쓰고 싶다면:
+            return MLPDynamic(input_size, hidden_sizes=hidden_layers[:1], output_size=1)
+
         elif model_selected == 'MLP_2':
-            return MLP(input_size=input_size, n_layers=2)
+            return MLPDynamic(input_size, hidden_sizes=hidden_layers[:2], output_size=1)
+
         elif model_selected == 'MLP_3':
-            return MLP(input_size=input_size, n_layers=3)
+            return MLPDynamic(input_size, hidden_sizes=hidden_layers[:3], output_size=1)
+
+        elif model_selected == 'MLP_dynamic':
+            # hidden_size가 몇 개든 전부 그대로 사용
+            return MLPDynamic(input_size, hidden_sizes=hidden_layers, output_size=1)
 
     # Scikit-learn 모델 생성
     print(f"[DEBUG] Creating Scikit-learn model: {model_selected}")
@@ -65,23 +94,28 @@ def create_model(model_selected, input_size=14, hyperparams=None):
         return xgboost.XGBRegressor(**hyperparams)
 
     raise ValueError(f"지원되지 않는 모델: {model_selected}")
+# 가변 레이어를 가진 MLP 모델
+class MLPDynamic(nn.Module):
+    def __init__(self, input_size, hidden_sizes, output_size=1):
+        super(MLPDynamic, self).__init__()
+        print(f"[DEBUG] Initializing MLPDynamic: input_size={input_size}, hidden_sizes={hidden_sizes}")
 
-class MLP(nn.Module):
-    def __init__(self, input_size, output_size=1, hidden_size=32, n_layers=1):
-        super(MLP, self).__init__()
-        print(f"[DEBUG] Initializing MLP: input_size={input_size}, hidden_size={hidden_size}, n_layers={n_layers}")
         layers = []
-        layers.append(nn.Linear(input_size, hidden_size))
-        layers.append(nn.ReLU())
-        for _ in range(n_layers - 1):
-            layers.append(nn.Linear(hidden_size, hidden_size))
+        in_dim = input_size
+
+        # hidden_sizes = [64, 32, 16] 등의 식
+        for hidden_dim in hidden_sizes:
+            layers.append(nn.Linear(in_dim, hidden_dim))
             layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_size, output_size))
+            in_dim = hidden_dim
+
+        # 최종 출력은 항상 1
+        layers.append(nn.Linear(in_dim, output_size))
+
         self.model = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.model(x)
-
 
 # 사용자 제공했던 EarlyStopping 클래스 그대로 사용
 class EarlyStopping:

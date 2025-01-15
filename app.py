@@ -345,39 +345,7 @@ def save_model():
     X_val_np = X_val
     y_val_np = y_val.reshape(-1, 1)
     print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
-    # # 데이터 전처리
-    # df = df.fillna(0)
-    # # 여기서 X, y를 정의
-    # X = df.drop(columns=[target_column])
-    # y = df[target_column]
-
-    # # # 사이킷런 MinMaxScaler 사용
     
-
-    # scaler_X = MinMaxScaler()
-    # scaler_y = MinMaxScaler()
-    
-    # # X와 y를 numpy 형태로 변환하여 fit_transform
-    # X = X.to_numpy()  # DataFrame -> Numpy array
-    # y = y.to_numpy().reshape(-1, 1)  # y를 2D array로
-    # print(X.shape, y.shape)
-    # # 스케일링 적용
-    # X_scaled = scaler_X.fit_transform(X)
-    # y_scaled = scaler_y.fit_transform(y).flatten()
-
-    # # 데이터 분할
-    # X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_scaled, test_size=val_ratio, random_state=42)
-
-    # # feature, target을 np.array 또는 torch.tensor 형태로 변환
-    # # Sklearn 모델: np.array 그대로 사용
-    # # Pytorch 모델: tensor로 바꾸는 건 _train_nn 내부에서 할 수도 있음
-    # X_train_np = X_train
-    # y_train_np = y_train.reshape(-1,1)
-    # X_val_np = X_val
-    # y_val_np = y_val.reshape(-1,1)
-    # print(X_train.shape, y_train.shape, X_val.shape, y_val.shape)
-
-
     # 모델 학습
     try:
         #print("모델 학습 시작...")
