@@ -1029,6 +1029,7 @@ def submit_prediction():
             'best_pred': best_pred,
             'Target': data['desire'],
             'filename': data['filename'],
+            'erase': erase
         }
 
         # 데이터 저장
@@ -1183,7 +1184,7 @@ def rerun_prediction():
             models=None,  # 필요시
             model_list=models_list,  # 혹은 models_list
             desired=desired,
-            starting_point=[float(v) for v in starting_points.values()],
+            starting_point=starting_points,  # 혹은 sp_list
             mode=mode,
             modeling=modeling,
             strategy=strategy,
@@ -1219,6 +1220,7 @@ def rerun_prediction():
             'best_pred': best_pred,
             'Target': combined_data['desire'],
             'filename': combined_data['filename'],
+            'erase': erase
         }
 
         # 새 input.json도 저장할지 여부 결정
@@ -1274,7 +1276,8 @@ def get_training_results():
                         'configurations': output_data.get('configurations'),
                         'best_config': output_data.get('best_config'),
                         'best_pred': output_data.get('best_pred'),
-                        'hyperparameter': hyperparams_data
+                        'hyperparameter': hyperparams_data,
+                        'erase': output_data.get('erase')
                     })
             except Exception as e:
                 print(f"Error reading {output_file_path}: {e}")
