@@ -8,8 +8,8 @@ import pandas as pd
 import mimetypes
 import pickle
 import json
-from model import create_model
-
+from model import create_model, _train_nn
+from data_preprocessing import MinMaxScaling
 import joblib
 from data_utils import load_data, save_data, preprocess_data, get_columns, get_data_preview
 # 전역에서 PyTorch와 관련 모듈 임포트
@@ -22,9 +22,9 @@ import time
 from sklearn.metrics import mean_squared_error
 from train import train_pytorch_model, train_sklearn_model
 import logging
-from traking2 import parameter_prediction
+from traking import parameter_prediction
 import shutil
-
+from sklearn.model_selection import KFold
 # 디버깅 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
@@ -149,6 +149,7 @@ def save_csv_metadata():
         item['unit'] = float(item.get('unit', 0.0))
         item['min'] = float(item.get('min', 0.0))
         item['max'] = float(item.get('max', 0.0))
+        item['decimal_place'] = int(item.get('max',0.0))
     # 메타데이터를 저장할 경로
     metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
     try:
@@ -246,7 +247,7 @@ def save_model():
     csv_filename = data.get('csv_filename')
     hyperparams = data.get('hyperparameters', {})
     target_column = "Target"
-    
+    epochs = hyperparams.get('epoch', 100) # 디폴트 0.001
     save_dir = os.path.join(MODEL_FOLDER, model_name)
     os.makedirs(save_dir, exist_ok=True)
 
@@ -306,7 +307,22 @@ def save_model():
     metadata_path = os.path.join(METADATA_FOLDER, f"{csv_filename}_metadata.json")
     with open(metadata_path, 'r', encoding='utf-8') as f:
         metadata_list = json.load(f)
-    
+
+
+    # -----------------------------------------------------------------------------
+    # ### (A) 각 열의 min == max인 경우, 해당 열을 erase_cols에 추가 후 학습에서 제외
+    # -----------------------------------------------------------------------------
+    erase_cols = []
+    for col in df.columns:
+        if col == target_column:
+            continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
+        if df[col].min() == df[col].max():
+            erase_cols.append(col)
+
+    if erase_cols:
+        print(f"[DEBUG] 변동이 없는(최소=최대) 열들: {erase_cols}. 학습에서 제외합니다.")
+        df.drop(columns=erase_cols, inplace=True)
+        
     # constraints 구성
     constraints = {}
     for item in metadata_list:
@@ -323,7 +339,7 @@ def save_model():
 
     
     # ---------------------------
-    # (2) 결측치 처리, X / y 분리
+    # (3) 결측치 처리, X / y 분리
     # ---------------------------
     df = df.fillna(0)
     X_df = df.drop(columns=[target_column])
@@ -350,7 +366,7 @@ def save_model():
     try:
         #print("모델 학습 시작...")
         if isinstance(model, torch.nn.Module):
-            training_losses = _train_nn(model, X_train_np, y_train_np)
+            training_losses = _train_nn(model, X_train_np, y_train_np, epochs)
         else:
             model.fit(X_train_np, y_train_np)  # 여기서 에러 발생 가능성 확인
         #print("모델 학습 완료.")
@@ -358,7 +374,7 @@ def save_model():
         print(f"모델 학습 중 오류 발생: {str(e)}")
         return jsonify({"status": "error", "message": f"모델 학습 중 오류 발생: {str(e)}"}), 500
     
-
+    
 
    # 모델 저장
     try:
@@ -478,7 +494,7 @@ def save_model():
             json.dump(model_info, f, ensure_ascii=False, indent=4)
     except Exception as e:
         return jsonify({'status': 'error', 'message': f"메타데이터 저장 중 오류 발생: {str(e)}"}), 500
-
+    print(erase_cols)
     # 결과 반환
     result = {
         'status': 'success',
@@ -487,7 +503,8 @@ def save_model():
         'csv_filename': csv_filename,
         'creation_time': creation_time,
         'hyperparameters': hyperparams,
-        'metrics': model_info['metrics']
+        'metrics': model_info['metrics'],
+        'erase_col': erase_cols
     }
 
     return jsonify(result), 200
@@ -536,6 +553,7 @@ def delete_model():
     except Exception as e:
         print(f"모델 삭제 중 오류 발생: {str(e)}")
         return jsonify({'status': 'error', 'message': f'모델 삭제 중 오류가 발생했습니다: {str(e)}'}), 500
+    
 @app.route('/api/get_models', methods=['GET'])
 def get_models():
     models = []
@@ -943,11 +961,7 @@ def submit_prediction():
         # 동일한 폴더가 있으면 그대로 사용
         if not os.path.exists(subfolder_path):
             os.makedirs(subfolder_path)
-        model_list = []
-        model_list = ['MLP()',"ML_XGBoost()"]#,""
-        starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
-
-
+        
         models = None # models = [model, model, model, ...]
         desired = 555
         mode = 'local'
@@ -964,28 +978,20 @@ def submit_prediction():
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
-        models, training_losses, configurations, predictions, best_config, best_pred, erase = parameter_prediction(data = df, models = models,
-                                                                                  model_list = model_list, desired = desired,
-                                                                                  starting_point = starting_point, 
-                                                                                  mode = mode, modeling = modeling,
-                                                                                  strategy = strategy, tolerance = tolerance, 
-                                                                                  beam_width = beam_width,
-                                                                                  num_candidates = num_candidates, escape = escape, 
-                                                                                  top_k = top_k, index = index,
-                                                                                  up = up, alternative = alternative)
-        #  입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
-        # # option에 따라 50개(global) 혹은 10개(local) 생성
-        # n_points = 50 if data['option'] == 'global' else 10
-
-        # # 입력값들(변수들) 키 목록 (딕셔너리이므로 순서를 맞추기 위해 sorted 사용 가능)
-        # var_keys = sorted(data['starting_points'].keys())
-
-        # # configurations & predictions 초기화
-        # configurations = []
-        # predictions = []
-
-        # target_value = float(data['desire'])
-
+        configurations, predictions, best_config, best_pred, pred_all  = run(data = data, models = models,
+                                                          desired = desired,
+                                                          starting_point = starting_point, 
+                                                          mode = mode, modeling = modeling,
+                                                          strategy = strategy, tolerance = tolerance, 
+                                                          beam_width = beam_width,
+                                                          num_cadidates = num_candidates, escape = escape, 
+                                                          top_k = top_k, index = index,
+                                                          up = up, alternative = alternative,
+                                                          unit = unit,
+                                                          lower_bound = lower_bound, 
+                                                          upper_bound = upper_bound, 
+                                                          data_type = data_type, decimal_place = decimal_place)
+        
     
         # models, training_loss,configurations, predictions, best_config, best_pred, erase = parameter_prediction(
         #     data=df,  # DataFrame
@@ -1019,7 +1025,12 @@ def submit_prediction():
         # print(f'predictions = {predictions}')
         # print(f'best_config = {configurations}')
         # print(f'erase = {erase}')
-
+        erase_cols = []
+        for col in df.columns:
+            if col == 'Target':
+                continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
+            if df[col].min() == df[col].max():
+                erase_cols.append(col)
         output_data = {
             'mode': data['option'],
             'timestamp': timestamp,  # output에도 동일 날짜 정보
@@ -1029,7 +1040,7 @@ def submit_prediction():
             'best_pred': best_pred,
             'Target': data['desire'],
             'filename': data['filename'],
-            'erase': erase
+            'erase': {erase_cols}
         }
 
         # 데이터 저장
@@ -1317,48 +1328,6 @@ def delete_result():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-
-def _train_nn(model, X_train, y_train, epochs=100, lr=0.001, batch_size=32):
-    model.train()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
-    early_stopping = EarlyStopping(patience=10)
-
-    # NumPy 배열을 PyTorch 텐서로 변환
-    X_train = torch.tensor(X_train, dtype=torch.float32)
-    y_train = torch.tensor(y_train, dtype=torch.float32)
-
-    dataset = torch.utils.data.TensorDataset(X_train, y_train)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-    training_losses = []
-
-    for epoch in range(epochs):
-        epoch_loss = 0.0
-        for batch_X, batch_y in dataloader:
-            optimizer.zero_grad()
-            outputs = model(batch_X)
-            loss = criterion(outputs, batch_y)
-            
-            # NaN 또는 Inf 체크
-            if torch.isnan(loss) or torch.isinf(loss):
-                raise ValueError(f"손실 값에 문제가 발생했습니다. Loss: {loss.item()}")
-
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-
-        avg_loss = epoch_loss / len(dataloader)
-        training_losses.append(avg_loss)
-        print(f"[DEBUG] Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}")
-
-        # Early stopping 체크
-        early_stopping(avg_loss)
-        if early_stopping.early_stop:
-            print(f"[DEBUG] Early stopping triggered at epoch {epoch+1}")
-            break
-
-    return training_losses
 # 사용자 제공했던 EarlyStopping 클래스 그대로 사용
 class EarlyStopping:
     def __init__(self, patience=10, delta=0.1):
@@ -1440,82 +1409,7 @@ def load_constraints_from_metadata(csv_filename):
 
     return constraints
 
-class MinMaxScaling:
-    """
-    data: 스케일링 대상 (DataFrame 또는 ndarray)
-    constraints: 메타데이터 기반으로 만든 컬럼별 [단위, min, max, dtype, round_digits] 사전
-                 -> 여기서는 'column' 개념이 없을 수도 있으므로, 인덱스 순서대로 사용하거나
-                    혹은 data가 DataFrame이면 columns 매핑이 필요.
-    dtype: torch.float32 등
-    """
 
-    def __init__(self, data, constraints, dtype=torch.float32):
-        self.constraints = constraints  # 외부에서 받은 constraints
-        self.dtype = dtype
-
-        self.max, self.min, self.range = [], [], []
-        self.data = pd.DataFrame([])
-
-        # data가 DataFrame이면 .values, 1D면 reshape 등
-        if isinstance(data, pd.DataFrame):
-            data = data.values
-        data = data.reshape(-1, 1) if len(data.shape) == 1 else data
-
-        epsilon = 2
-        for i in range(data.shape[1]):
-            col_data = data[:, i]
-            max_ = col_data.max()
-            min_ = col_data.min()
-            if max_ == min_:
-                max_ *= epsilon
-
-            self.max.append(max_)
-            self.min.append(min_)
-            self.range.append(max_ - min_)
-
-            scaled_col = (col_data) / (max_ - min_)
-            self.data = pd.concat([self.data, pd.DataFrame(scaled_col)], axis=1)
-
-        # 최종적으로 torch.tensor에 저장
-        self.data = torch.tensor(self.data.values, dtype=self.dtype)
-
-    def denormalize(self, data):
-        """
-        data: 스케일링된 1D/2D numpy array or torch.Tensor
-        -> 각 index별로 self.max[i], self.min[i]를 사용
-        -> 그리고 self.constraints를 이용해 round 자릿수 결정
-        """
-        # data가 torch.Tensor이면 numpy로 변환
-        data = data.detach().numpy() if isinstance(data, torch.Tensor) else data
-
-        # 만약 columns(컬럼명) 단위 매핑이 필요한 경우, 별도 로직 필요.
-        # 지금 예시는 "인덱스 순서"로만 constraints를 매핑한다고 가정(주의).
-        #  (즉, constraints가 key가 아니라 list 형태로 관리된다고 치거나,
-        #   혹은 인덱스 순서대로 [att1, att2, ...] 라고 가정)
-
-        new_data = []
-        for i, element in enumerate(data):
-            # 역정규화
-            element = element * (self.max[i] - self.min[i]) + 0  # + min[i]? (기존 코드엔 +min이 생략되어있을 수도 있음)
-            # round 자릿수
-            # ex) round_digits = self.constraints[some_key][4] ...
-            # 여기서는 단순히 i번째 constraint를 가져온다고 가정.
-            # constraints = { 'att1': [...], 'att2': [...] } 이면 list로 전환해서 i번째를 찾거나
-            # index가 'col_name'과 매칭되는지 별도 관리가 필요함
-            # 예: 
-            # constraints_list = list(self.constraints.values()) 
-            # round_digits = constraints_list[i][4]
-            # element = round(element, round_digits)
-
-            # (혹은, 만약 인덱스/컬럼 매핑을 명시적으로 해야 한다면, 
-            #  init에서 data.columns 순서대로 constraints를 저장한 리스트를 만들어둬야 합니다.)
-            # 아래는 "i번째 constraint"라고 가정한 예시:
-            constraints_list = list(self.constraints.values())
-            round_digits = constraints_list[i][4]
-            
-            element = round(element, round_digits)
-            new_data.append(element)
-        return np.array(new_data).flatten()
 
 
 def rae(y_true, y_pred):

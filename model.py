@@ -140,3 +140,48 @@ class EarlyStopping:
             self.best_score = score
             self.counter = 0
             self.train_loss_min = train_loss
+
+
+
+
+def _train_nn(model, X_train, y_train, epochs=100, lr=0.001, batch_size=32):
+    model.train()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.MSELoss()
+    early_stopping = EarlyStopping(patience=10)
+
+    # NumPy 배열을 PyTorch 텐서로 변환
+    X_train = torch.tensor(X_train, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.float32)
+
+    dataset = torch.utils.data.TensorDataset(X_train, y_train)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    training_losses = []
+
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        for batch_X, batch_y in dataloader:
+            optimizer.zero_grad()
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+            
+            # NaN 또는 Inf 체크
+            if torch.isnan(loss) or torch.isinf(loss):
+                raise ValueError(f"손실 값에 문제가 발생했습니다. Loss: {loss.item()}")
+
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+
+        avg_loss = epoch_loss / len(dataloader)
+        training_losses.append(avg_loss)
+        print(f"[DEBUG] Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}")
+
+        # Early stopping 체크
+        early_stopping(avg_loss)
+        if early_stopping.early_stop:
+            print(f"[DEBUG] Early stopping triggered at epoch {epoch+1}")
+            break
+
+    return training_losses

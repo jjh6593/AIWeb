@@ -1,18 +1,24 @@
-def run(data, models, model_list, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
-        num_cadidates, escape, top_k, index, up, alternative):
-    
-    neural_list = ['MLP','Conv']
+import sys
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import time  
+import random
+import xgboost
+import sklearn
+from itertools import product
+from itertools import chain
 
-    regression_epochs = 500
-    regression_eta = 0.01
-    regression_show_epochs = True 
-    regression_dropout = 0.3
-    regression_batch = 256
-    regression_hidden_size = 32
+
+def parameter_prediction(data, models, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
+        num_cadidates, escape, top_k, index, up, alternative, unit, lower_bound, upper_bound, data_type, decimal_place):
 
     configuration_patience = 10
     configuration_patience_volume = 0.01
-    configuration_steps = 100
+    configuration_steps = 201
     configuration_eta = 10
     configuration_eta_decay = 0.001
     configuration_show_steps = True
@@ -25,7 +31,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
 
     if_visualize = True
 
-    seed = 2024
+    seed = 2025
     random.seed(seed)
     np.random.seed(seed)
 
@@ -36,229 +42,95 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
+    
     output_size = 1
     input_size = data.values.shape[1] - output_size
+    print("The number of feature  : ",input_size)
     dtype = torch.float32
     
-    constraints = {'ATT1' : [5, min(data.iloc[:,0+1]), max(data.iloc[:,0+1]), int, 0, 150],
-                  'ATT2'  : [5, min(data.iloc[:,1+1]), max(data.iloc[:,1+1]), int, 0, 25],
-                  'ATT3'  : [10, min(data.iloc[:,2+1]), max(data.iloc[:,2+1]), int, -1, 40],
-                  'ATT4'  : [0.5, min(data.iloc[:,3+1]), max(data.iloc[:,3+1]), float, 1, 1],
-                  'ATT5'  : [5, min(data.iloc[:,4+1]), max(data.iloc[:,4+1]), int, 0, 120],
-                  'ATT6'  : [5, min(data.iloc[:,5+1]), max(data.iloc[:,5+1]), int, 0, 250],
-                  'ATT7'  : [5, min(data.iloc[:,6+1]), max(data.iloc[:,6+1]), int, 0, 10],
-                  'ATT8'  : [5, min(data.iloc[:,7+1]), max(data.iloc[:,7+1]), int, 0, 25],
-                  'ATT9'  : [5, min(data.iloc[:,8+1]), max(data.iloc[:,8+1]), int, 0, 25],
-                  'ATT10' : [60, min(data.iloc[:,9+1]), max(data.iloc[:,9+1]), int, -1, 900],
-                  'ATT11' : [0.05, min(data.iloc[:,10+1]), max(data.iloc[:,10+1]), float, 2, 0.25],
-                  'ATT12' : [1, min(data.iloc[:,11+1]), max(data.iloc[:,11+1]), int, 0, 2],
-                  'ATT13' : [5, min(data.iloc[:,12+1]), max(data.iloc[:,12+1]), int, 0, 100],
-                  'ATT14' : [60, min(data.iloc[:,13+1]), max(data.iloc[:,13+1]), int, -1, 1800],
-                  'ATT15' : [1000, min(data.iloc[:,14+1]), max(data.iloc[:,14+1]), int, 0, 2000]}
+    def create_constraints(unit, lower_bound, upper_bound, data_type, decimal_place):
+        attribute_names = [
+            f"ATT{i + 1}" for i in range(len(unit))
+        ]
 
-    starting_point = pd.DataFrame(np.array(starting_point).reshape(1,-1), columns = [f'ATT{i+1}' for i in range(input_size)])
-    erase = []
-    for i in range(input_size):
-        if min(data.iloc[:,i+1]) == max(data.iloc[:,i+1]):
-            erase.append(f"att{i+1}")
-            del constraints[f'ATT{i+1}']
-            del starting_point[f'ATT{i+1}']
-                               
-    
-    starting_point = starting_point.values.reshape(-1).tolist()
-    data = data.drop(columns=erase)
-    input_size = data.values.shape[1] - output_size    
-    
-    class MinMaxScaling :
-        def __init__(self, data): #np.DataFrame
-            self.max, self.min, self.range = [],[], []
-            self.data = pd.DataFrame([])
-            data = data.values.reshape(-1,1) if len(data.values.shape) == 1 else data.values
+        constraints = {
+            name: [
+                unit[i],
+                lower_bound[i],
+                upper_bound[i],
+                data_type[i],
+                decimal_place[i]
+            ]
+            for i, name in enumerate(attribute_names)
+        }
 
-            epsilon = 2
-            for i in range(data.shape[1]) :
-                max_, min_ = max(data[:,i]), min(data[:,i])
-                if max_ == min_ : max_ *= epsilon
+        return constraints    
+    
+    constraints = create_constraints(unit = unit, 
+                                     lower_bound = lower_bound, 
+                                     upper_bound = upper_bound, 
+                                     data_type = data_type, 
+                                     decimal_place = decimal_place)    
+    
+
+
+    class MinMaxScaling:
+        """
+        A class for normalizing and denormalizing data using Min-Max scaling.
+        """
+        def __init__(self, data):
+            """
+            Initializes the MinMaxScaling object.
+
+            Args:
+                data (pd.DataFrame): Input data to be scaled.
+            """
+            self.max, self.min, self.range = [], [], []
+            self.data = pd.DataFrame()
+
+            # Reshape data if necessary
+            data = data.values.reshape(-1, 1) if len(data.values.shape) == 1 else data.values
+
+            epsilon = 2  # Small adjustment to avoid division by zero
+
+            for i in range(data.shape[1]):
+                max_, min_ = max(data[:, i]), min(data[:, i])
+                if max_ == min_:
+                    max_ *= epsilon
+
                 self.max.append(max_)
                 self.min.append(min_)
-                self.range.append(max_-min_)
-                self.data = pd.concat([self.data, pd.DataFrame((data[:,i])/(max_-min_))],axis = 1)
-            self.data = torch.tensor(self.data.values, dtype = dtype)
+                self.range.append(max_ - min_)
+
+                # Normalize the column and add to the DataFrame
+                normalized_column = data[:, i] / (max_ - min_)
+                self.data = pd.concat([self.data, pd.DataFrame(normalized_column)], axis=1)
+
+            # Convert normalized data to a torch tensor
+            self.data = torch.tensor(self.data.values, dtype=dtype)
 
         def denormalize(self, data):
+            """
+            Denormalizes data back to its original scale.
+
+            Args:
+                data (torch.Tensor or np.ndarray): Normalized data to be converted.
+
+            Returns:
+                list: Denormalized data.
+            """
+            # Convert torch tensor to numpy array if necessary
             data = data.detach().numpy() if isinstance(data, torch.Tensor) else data
+
             new_data = []
             for i, element in enumerate(data):
-                element = (element * (self.max[i] - self.min[i])) 
-                element = round(element, np.array(list(constraints.values()))[:,4][i])
+                element = element * (self.max[i] - self.min[i])
+                element = round(element, np.array(list(constraints.values()))[:, 4][i])
                 new_data.append(element)
+
             return new_data
-        
-    class MLP(nn.Module):
-        def __init__(self, input_size = input_size, output_size = output_size, hidden_size = regression_hidden_size, n_layers = 1):
-            super(MLP, self).__init__()
-            self.first_layer = nn.Linear(input_size, hidden_size)
-            self.layers = []
-            self.layers_dropout =[]
 
-            if n_layers > 1 : 
-                self.layers += [nn.Linear(hidden_size, hidden_size) for _ in range(n_layers - 1)]
-           #     self.layers_dropout += [nn.Dropout(regression_dropout) for _ in range(n_layers - 1)]
 
-            self.last_layer = nn.Linear(hidden_size, output_size)
-            self.dropout_input = nn.Dropout(regression_dropout)
-
-        def forward(self, x):
-            x = torch.relu(self.first_layer(x))
-            x = self.dropout_input(x)
-            for i in range(len(self.layers)):
-                layer = self.layers[i]
-           #     drop = self.layers_dropout[i]
-                x = torch.relu(layer(x))
-           #     x = drop(x)
-
-            x = self.last_layer(x)
-            return x
-        
-    def ML_XGBoost():
-        return xgboost.XGBRegressor()
-
-    def ML_LinearRegressor():
-        return LinearRegression()
-
-    def ML_Ridge():
-        return Ridge(alpha=1.0)
-
-    def ML_Lasso():
-        return Lasso(alpha = 0.1)
-
-    def ML_DecisionTreeRegressor():
-        return DecisionTreeRegressor(max_depth = 5)
-
-    def ML_RandomForestRegressor():
-        return RandomForestRegressor()
-
-    def ML_GradientBoostingRegressor():
-        return GradientBoostingRegressor()
-
-    def ML_SVR():
-        return SVR(kernel='rbf')
-
-    def ML_KNeighborsRegressor():
-        return KNeighborsRegressor(n_neighbors=5)
-
-    def ML_HuberRegressor():
-        return HuberRegressor()
-
-    def ML_GaussianProcessRegressor():
-        return GaussianProcessRegressor()
-     
-    def modeller(model) :
-        if model == 'MLP()':
-            x = MLP()
-        elif model == 'ML_XGBoost()':
-            x = ML_XGBoost()
-        elif model == 'MLP(n_layers = 2)':
-            x = MLP(n_layers=2)
-        elif model == 'MLP(n_layers = 3)':
-            x = MLP(n_layers=3)
-        elif model == 'ML_LinearRegressor()':
-            x = ML_LinearRegressor()
-        elif model == 'ML_Ridge()':
-            x = ML_Ridge()
-        elif model == 'ML_Lasso()':
-            x = ML_Lasso()
-        elif model == 'ML_DecisionTreeRegressor()':
-            x = ML_DecisionTreeRegressor()
-        elif model == 'ML_RandomForestRegressor()':
-            x = ML_RandomForestRegressor()
-        elif model == 'ML_GradientBoostingRegressor()':
-            x = ML_GradientBoostingRegressor()
-        elif model == 'ML_SVR()':
-            x = ML_SVR()
-        elif model == 'ML_KNeighborsRegressor()':
-            x = ML_KNeighborsRegressor()
-        elif model == 'ML_HuberRegressor()':
-            x = ML_HuberRegressor()
-        elif model == 'ML_GaussianProcessRegressor()':
-            x = ML_GaussianProcessRegressor()
-        else:
-            raise ValueError(f"Unknown model: {model}")
-            
-        return x
-    class EarlyStopping:
-        def __init__(self, patience=10, delta=0.1):
-            self.patience = patience
-            self.delta = delta
-            self.counter = 0
-            self.best_score = None
-            self.early_stop = False
-            self.train_loss_min = float('inf')
-
-        def __call__(self, train_loss):
-            score = -train_loss
-
-            if self.best_score is None:
-                self.best_score = score
-                self.train_loss_min = train_loss
-            elif score < self.best_score + self.delta:
-                self.counter += 1
-                if self.counter >= self.patience:
-                    self.early_stop = True
-            else:
-                self.best_score = score
-                self.counter = 0
-                self.train_loss_min = train_loss
-                
-    def train(feature, target):
-        trained_models = []
-        all_training_losses = []
-        for i, model in enumerate(models):
-            try: 
-                training_losses = _train_nn(model, feature, target)
-                all_training_losses.append(training_losses)
-            except: 
-                _train_ml(model, feature, target)
-                all_training_losses.append(None)
-            trained_models.append(model)
-            print(f"The regressor {model_list[i]} has been trained.")
-        return trained_models, all_training_losses
-
-    def _train_nn(model, feature, target, epochs = regression_epochs):
-        optimizer = optim.Adam(model.parameters(), lr=regression_eta)
-        criterion = nn.MSELoss() 
-        early_stopping = EarlyStopping()
-
-        training_losses = []
-        Batch = []
-        for indexer in range((len(feature) // regression_batch) + 1):
-            Batch.append([feature[indexer * regression_batch : (indexer+1) * regression_batch,:],
-                        target[indexer * regression_batch : (indexer+1) * regression_batch,:]])
-        for epoch in range(regression_epochs):
-            train_loss = 0
-            for fea, tar in Batch:
-                optimizer.zero_grad()
-                output = model(feature)
-                loss = criterion(output, target)
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.item()
-
-            train_loss /= len(Batch)
-            if regression_show_epochs and epoch % 10 == 0: print(f"Epoch [{epoch}/{epochs}], Loss: {train_loss:.4f}")    
-            early_stopping(train_loss)
-            training_losses.append(train_loss)
-            if epoch > 100 and early_stopping.early_stop:
-                print("Early stopping triggered.")
-           #     model.eval()
-                break
-      #  model.eval()
-        return training_losses
-    def _train_ml(model, feature, target):
-        model.fit(feature, target)       
-        
     class UNIVERSE :
         def __init__(self, constraints = constraints):
             self.constraints = constraints
@@ -278,14 +150,14 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             copy = x.clone()
             for i, model in enumerate(models):
                 x = x.clone().detach().requires_grad_(True)
-                try: 
+                if isinstance(model, nn.Module):
                     prediction = model(x)
                     loss = abs(prediction - y_prime)
                     loss.backward()
                     gradient = x.grad.detach().numpy()
                     prediction = prediction.detach().numpy()
 
-                except: # ML
+                else: # ML
                     x = x.detach().numpy().reshape(1,-1)
                     prediction = model.predict(x)
                     if fake_gradient :
@@ -302,9 +174,8 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 predictions.append(prediction)
                 gradients.append(gradient)
 
-            if modeling == 'single': return predictions[0], gradients[0]
-            elif modeling == 'averaging': return sum(predictions)/len(predictions), sum(gradients)/len(gradients)   
-            elif modeling == 'ensemble': return "TODO"
+            if modeling == 'single': return predictions[0], gradients[0], predictions
+            elif modeling == 'ensemble': return sum(predictions)/len(predictions), sum(gradients)/len(gradients), predictions  
             else: raise Exception(f"[modeling error] there is no {modeling}.")
 
 
@@ -339,11 +210,10 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.modeling = modeling
             self.strategy = strategy
             for model in models : 
-                try: model.eval()
-                except: pass
+                if isinstance(model, nn.Module) : model.eval()
                 self.models.append(model)
 
-        def exhaustive(self, starting_point = np.array(list(constraints.values()))[:,5].tolist(), top_k = 5, alternative = 'keep_move'):
+        def exhaustive(self, starting_point, top_k = 5, alternative = 'keep_move'):
             self.starting_point = super().truncate(starting_point)
             self.starting_point = np.array([self.starting_point[i] / (feature.max[i] - feature.min[i]) 
                                             for i in range(input_size)])
@@ -359,7 +229,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.adj = []
 
             if alternative == 'keep_move' or alternative == 'keep_up_down':
-                prediction_km, gradient_km = super().predict(self.models,torch.tensor(self.starting_point, dtype = dtype), 
+                prediction_km, gradient_km, p_all = super().predict(self.models,torch.tensor(self.starting_point, dtype = dtype), 
                                                self.y_prime, self.modeling, fake_gradient = True)
                 prediction_km = prediction_km[0] if isinstance(prediction_km,list) else prediction_km
             for combination in self.all_combinations :
@@ -408,12 +278,15 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
         #    print(len(self.search_space))
             self.predictions = []
             self.configurations = []
+            self.pred_all = []
             for candidate in self.search_space :
-                prediction, _ = super().predict(self.models,candidate, self.y_prime, self.modeling, fake_gradient = False)
+                prediction, _, p_all = super().predict(self.models,candidate, self.y_prime, self.modeling, fake_gradient = False)
                 prediction = target.denormalize(prediction)[0]
                 configuration = feature.denormalize(candidate)
                 self.predictions.append(prediction)
                 self.configurations.append(configuration)
+                self.pred_all.append([target.denormalize([e.item()])[0] for e in p_all])
+                
 
             self.table = pd.DataFrame({'configurations':self.configurations,'find_dup' : self.configurations,
                                       'predictions':self.predictions,'difference' : np.array(abs(np.array(self.predictions)-self.desired)).tolist(),
@@ -433,10 +306,10 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             best_config = configurations[0]
             best_pred = predictions[0]
 
-            try: return configurations, predictions, best_config, best_pred
-            except : return self.configurations[:].values.tolist(), self.predictions[:].values.tolist(), best_config, best_pred
+            try: return configurations, predictions, best_config, best_pred, self.pred_all
+            except : return self.configurations[:].values.tolist(), self.predictions[:].values.tolist(), best_config, best_pred, self.pred_all
 
-        def manual(self, starting_point = np.array(list(constraints.values()))[:,5].tolist(), index=0, up=True):
+        def manual(self, starting_point, index=0, up=True):
             self.starting_point = super().truncate(starting_point)
             self.starting_point = np.array([self.starting_point[i] / (feature.max[i] - feature.min[i]) 
                                             for i in range(input_size)])
@@ -446,10 +319,11 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             else : adjustment[index] -= self.unit_by_feature[index]
             position = self.starting_point + adjustment         
             position = super().bounding(position)        
-            prediction, _ = super().predict(self.models,position, self.y_prime, self.modeling)
+            prediction, _, p_all = super().predict(self.models,position, self.y_prime, self.modeling)
             prediction = target.denormalize(prediction)
             configuration = feature.denormalize(position)
-            return [configuration], prediction, configuration, prediction
+            p_all = [target.denormalize([e.item()])[0] for e in p_all]
+            return [configuration], prediction, configuration, prediction, p_all 
         
     class GlobalMode(UNIVERSE):
         def __init__(self, desired, models, modeling, strategy, tolerance = configuration_tolerance, steps = configuration_steps):
@@ -462,8 +336,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.tolerance = tolerance / (target.max[0] - target.min[0])
             self.steps = steps
             for model in models : 
-                try: model.train()
-                except: pass
+                if isinstance(model, nn.Module): model.train()
                 self.models.append(model)
 
         def predict_global(self, models, x, y_prime):
@@ -472,14 +345,14 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             copy = x.clone()
             for i, model in enumerate(models):
                 x = x.clone().detach().requires_grad_(True)
-                try: 
+                if isinstance(model, nn.Module):
                     prediction = model(x)
                     loss = prediction - y_prime
                     loss.backward()
                     gradient = x.grad.detach().numpy()
                     prediction = prediction.detach().numpy()
 
-                except: # ML
+                else:
                     x = x.detach().numpy().reshape(1,-1)
                     prediction = model.predict(x)
                     gradient = []
@@ -495,7 +368,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 gradients.append(gradient)
             return predictions, gradients
 
-        def beam(self, beam_width = 5, starting_point = np.array(list(constraints.values()))[:,5].tolist()) :
+        def beam(self, beam_width, starting_point) :
             self.beam_width = beam_width
             y_prime = self.desired / (target.max[0] - target.min[0])
             tolerance = self.tolerance
@@ -510,6 +383,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
 
             self.beam_history = []
             self.previous_gradient = [[], [], [], [], []]
+            self.prediction_all = []
 
             success = [False]
             which = []
@@ -529,6 +403,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 candidates_score = []
                 beam_predictions = []
                 beams = []
+                p_all = []
                 for p, current_pos in enumerate(current_positions):
                     configuration = feature.denormalize(current_pos.clone().detach())
                     configurations.append(configuration)
@@ -540,7 +415,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                     prediction_original = prediction_avg * (target.max[0] - target.min[0])
                     prediction_original = prediction_original[0]
                     beam_predictions.append(prediction_original)     
-
+                    p_all.append([target.denormalize([e.item()])[0] for e in predictions])
                     if abs(prediction_original - self.desired) < close_margin : close = True
                     else : close = False
                 #    print(close)
@@ -553,9 +428,11 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                #         order = np.argsort(abs(gradient_avg))
                #     else :
                #         order = np.argsort(abs(gradient_avg))[::-1]
-                    order = np.random.permutation(np.argsort(abs(gradient_avg))[::-1])
-                    beam = order[:self.beam_width]
+               #     order = np.random.permutation(np.argsort(abs(gradient_avg))[::-1])
+                    order = np.argsort(abs(gradient_avg))[::-1]
 
+                    beam = order[:self.beam_width]
+                    
                     for b in beam:
 
                         adjustment = list(np.repeat(0,len(self.unit_by_feature)))
@@ -575,7 +452,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                         candidates.append(position)
                         candidates_score.append(abs(gradient_avg[b]))
 
-                if step % 10 == 0 : print(f"Step {step} Target : {self.desired}, Prediction : {beam_predictions}")
+                if step % 10 == 0 and step != 0 : print(f"Step {step} Target : {self.desired}, Prediction : {beam_predictions}")
                 select = np.argsort(candidates_score)[::-1][:self.beam_width]
                 new_positions = [torch.tensor(candidates[s], dtype = dtype) for s in select]
 
@@ -585,20 +462,20 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 self.beam_history.append(beam.tolist())
                 self.beam_positions_denorm.append(configurations) 
                 self.beam_targets_denorm.append(beam_predictions)
-
+                self.prediction_all.append(p_all)
                 if any(success): break      
 
-            flattened_positions = list(chain.from_iterable(G.beam_positions_denorm))
-            flattened_predictions = list(chain.from_iterable(G.beam_targets_denorm))
+            flattened_positions = list(chain.from_iterable(self.beam_positions_denorm))
+            flattened_predictions = list(chain.from_iterable(self.beam_targets_denorm))
             best = np.argsort(abs(np.array(flattened_predictions)-self.desired))[0]
 
             self.best_position = flattened_positions[best]
             self.best_prediction = flattened_predictions[best]
 
-            return self.beam_positions_denorm, self.beam_targets_denorm, self.best_position, self.best_prediction
+            return self.beam_positions_denorm, self.beam_targets_denorm, self.best_position, self.best_prediction, self.prediction_all
 
 
-        def stochastic(self, num_candidates = 5, starting_point = np.array(list(constraints.values()))[:,5].tolist()) :
+        def stochastic(self, num_candidates = 5, starting_point = starting_point) :
             self.num_candidates = num_candidates
             y_prime = self.desired / (target.max[0] - target.min[0])
             tolerance = self.tolerance
@@ -612,6 +489,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.stochastic_predictions = []
             self.stochastic_configurations = []
             self.stochastic_predictions_all = []
+            self.prediction_all = []
 
             for step in range(self.steps):
                 configuration = feature.denormalize(x_prime)
@@ -645,18 +523,20 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 self.stochastic_chosen.append(chosen)    
                 self.stochastic_predictions.append(prediction_original)
                 self.stochastic_configurations.append(configuration)
+                self.prediction_all.append([target.denormalize([e.item()])[0] for e in predictions])
             #    self.stochastic_predictions_all.append(prediction_original_all)
 
                 if abs(prediction_avg - y_prime) < tolerance: break
-            best = np.argsort(np.array(self.stochastic_predictions)-self.desired)[0]
+                    
+            best = np.argsort(abs(np.array(self.stochastic_predictions)-self.desired))[0]
 
             self.stochastic_best_position = self.stochastic_configurations[best]
             self.stochastic_best_prediction = self.stochastic_predictions[best]
 
-            return self.stochastic_configurations, self.stochastic_predictions, self.stochastic_best_position, self.stochastic_best_prediction
+            return self.stochastic_configurations, self.stochastic_predictions, self.stochastic_best_position,self.stochastic_best_prediction, self.prediction_all
 
 
-        def best_one(self, starting_point = np.array(list(constraints.values()))[:,5].tolist(), escape = True) :
+        def best_one(self, starting_point, escape = True) :
             y_prime = self.desired / (target.max[0] - target.min[0])
             tolerance = self.tolerance
 
@@ -667,6 +547,7 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
             self.best_one_chosen = []
             self.best_one_predictions = []
             self.best_one_configurations = []
+            self.prediction_all = []
 
             avoid = []
             memory = []
@@ -706,6 +587,9 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 self.best_one_chosen.append(chosen)    
                 self.best_one_predictions.append(prediction_original)
                 self.best_one_configurations.append(configuration)
+                self.prediction_all.append([target.denormalize([e.item()])[0] for e in predictions])
+
+                
                 memory.append(prediction_original)
                 if len(memory) > memory_size : memory = memory[len(memory)-memory_size:]
                 if len(memory) == 5 and len(set(memory)) < 3  and previous == chosen: avoid.append(chosen)
@@ -713,46 +597,49 @@ def run(data, models, model_list, desired, starting_point, mode, modeling, strat
                 if abs(prediction_avg - y_prime) < tolerance: break
                 if escape and len(avoid) == input_size : break
                 previous = chosen
-            best = np.argsort(np.array(self.best_one_predictions)-self.desired)[0]
+            best = np.argsort(abs(np.array(self.best_one_predictions)-self.desired))[0]
 
             self.best_one_best_position = self.best_one_configurations[best]
             self.best_one_best_prediction = self.best_one_predictions[best]
 
-            return self.best_one_configurations, self.best_one_predictions, self.best_one_best_position, self.best_one_best_prediction
+            return self.best_one_configurations, self.best_one_predictions, self.best_one_best_position, self.best_one_best_prediction, self.prediction_all
 
     target = MinMaxScaling(data['Target'])
     feature = MinMaxScaling(data[[column for column in data.columns if column != 'Target']])
-    if models == None:
-        models = []
-        for model in model_list:
-            x = modeller(model)
-            models.append(x)
-        models, training_losses = train(feature.data, target.data)
-    else : training_losses = []
-        
+    
     configurations, predictions, best_config, best_pred = None, None, None, None
     if mode == 'global' :
         G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
         if strategy == 'beam':
-            configurations, predictions, best_config, best_pred = G.beam(starting_point = starting_point,
+            configurations, predictions, best_config, best_pred, pred_all = G.beam(starting_point = starting_point,
                                                                  beam_width = beam_width)
             
         elif strategy == 'stochastic':
-            configurations, predictions, best_config, best_pred = G.stochastic(starting_point = starting_point,
+            configurations, predictions, best_config, best_pred, pred_all = G.stochastic(starting_point = starting_point,
                                                                  num_candidates = num_candidates)
             
         elif strategy == 'best_one':
-             configurations, predictions, best_config, best_pred = G.best_one(starting_point = starting_point, 
+             configurations, predictions, best_config, best_pred, pred_all = G.best_one(starting_point = starting_point, 
                                                                               escape = escape)
         
     elif mode == 'local':
         L = LocalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
         if strategy == 'exhaustive':
-            configurations, predictions, best_config, best_pred = L.exhaustive(starting_point = starting_point,
+            configurations, predictions, best_config, best_pred, pred_all = L.exhaustive(starting_point = starting_point,
                                                                                 alternative = alternative, top_k = top_k)
         elif strategy == 'manual' :
-            configurations, predictions, best_config, best_pred = L.manual(starting_point = starting_point, index = index, up = up)
+            configurations, predictions, best_config, best_pred, pred_all = L.manual(starting_point = starting_point, index = index, up = up)
         
+    if mode == 'global' and len(predictions) > 1:
+        configurations = configurations[1:]
+        predictions = predictions[1:]
+        pred_all = pred_all[1:]
         
-    return models, training_losses, configurations, predictions, best_config, best_pred, erase
-
+    configurations = [
+        [data_type[col](value) for col, value in enumerate(configurations[row])]
+        for row in range(len(configurations))
+    ]
+    
+    best_config = [data_type[i](c) for i, c in enumerate(best_config)]
+        
+    return configurations, predictions, best_config, best_pred, pred_all
