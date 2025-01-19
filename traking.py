@@ -14,7 +14,7 @@ from itertools import chain
 
 
 def parameter_prediction(data, models, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
-        num_cadidates, escape, top_k, index, up, alternative, unit, lower_bound, upper_bound, data_type, decimal_place):
+        num_candidates, escape, top_k, index, up, alternative, unit, lower_bound, upper_bound, data_type, decimal_place):
 
     configuration_patience = 10
     configuration_patience_volume = 0.01
@@ -606,30 +606,31 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
     target = MinMaxScaling(data['Target'])
     feature = MinMaxScaling(data[[column for column in data.columns if column != 'Target']])
-    
+    print('scaling done')
     configurations, predictions, best_config, best_pred = None, None, None, None
     if mode == 'global' :
         G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
         if strategy == 'beam':
             configurations, predictions, best_config, best_pred, pred_all = G.beam(starting_point = starting_point,
                                                                  beam_width = beam_width)
-            
+            print('Global beam인식')
         elif strategy == 'stochastic':
             configurations, predictions, best_config, best_pred, pred_all = G.stochastic(starting_point = starting_point,
                                                                  num_candidates = num_candidates)
-            
+            print('Global stochastic인식')
         elif strategy == 'best_one':
-             configurations, predictions, best_config, best_pred, pred_all = G.best_one(starting_point = starting_point, 
+            configurations, predictions, best_config, best_pred, pred_all = G.best_one(starting_point = starting_point, 
                                                                               escape = escape)
-        
+            print('Global bestone인식')
     elif mode == 'local':
         L = LocalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
         if strategy == 'exhaustive':
             configurations, predictions, best_config, best_pred, pred_all = L.exhaustive(starting_point = starting_point,
                                                                                 alternative = alternative, top_k = top_k)
+            print('Local eec인식')
         elif strategy == 'manual' :
             configurations, predictions, best_config, best_pred, pred_all = L.manual(starting_point = starting_point, index = index, up = up)
-        
+            print('Local manual')
     if mode == 'global' and len(predictions) > 1:
         configurations = configurations[1:]
         predictions = predictions[1:]
@@ -639,7 +640,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
         [data_type[col](value) for col, value in enumerate(configurations[row])]
         for row in range(len(configurations))
     ]
-    
+    print('제약조건 설정')
     best_config = [data_type[i](c) for i, c in enumerate(best_config)]
         
     return configurations, predictions, best_config, best_pred, pred_all

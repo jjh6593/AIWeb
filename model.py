@@ -96,23 +96,36 @@ def create_model(model_selected, input_size=14, hyperparams=None):
     raise ValueError(f"지원되지 않는 모델: {model_selected}")
 # 가변 레이어를 가진 MLP 모델
 class MLPDynamic(nn.Module):
-    def __init__(self, input_size, hidden_sizes, output_size=1):
+    """
+        input_size: 입력 크기
+        hidden_sizes: 숨김층 크기 리스트 (예: [64, 32, 16])
+        output_size: 출력 크기 (기본값=1)
+        dropout_rate: 첫 번째 레이어 뒤에 적용할 드롭아웃 비율 (기본값=0.1)
+    """
+    def __init__(self, input_size, hidden_sizes, output_size=1, dropout_rate=0.1):
         super(MLPDynamic, self).__init__()
         print(f"[DEBUG] Initializing MLPDynamic: input_size={input_size}, hidden_sizes={hidden_sizes}")
 
         layers = []
         in_dim = input_size
 
-        # hidden_sizes = [64, 32, 16] 등의 식
-        for hidden_dim in hidden_sizes:
+        # 첫 번째 레이어 생성
+        layers.append(nn.Linear(in_dim, hidden_sizes[0]))
+        layers.append(nn.ReLU())
+        layers.append(nn.Dropout(p=dropout_rate))  # 첫 번째 레이어 뒤에 드롭아웃 추가
+        in_dim = hidden_sizes[0]
+
+        # 두 번째 이후 레이어 생성
+        for hidden_dim in hidden_sizes[1:]:
             layers.append(nn.Linear(in_dim, hidden_dim))
             layers.append(nn.ReLU())
             in_dim = hidden_dim
 
-        # 최종 출력은 항상 1
+        # 최종 출력 레이어
         layers.append(nn.Linear(in_dim, output_size))
 
         self.model = nn.Sequential(*layers)
+
 
     def forward(self, x):
         return self.model(x)

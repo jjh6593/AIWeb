@@ -276,31 +276,7 @@ def save_model():
     # Target 컬럼 확인
     if target_column not in df.columns:
         return jsonify({'status': 'error', 'message': f"Target 컬럼 '{target_column}'이 CSV 파일에 존재하지 않습니다."}), 400
-
-    # 모델 생성
-    try:
-        # GradientBoostingRegressor 또는 RandomForestRegressor일 경우 외부에서 생성
-        if model_selected == 'RandomForestRegressor':
-            model = RandomForestRegressor(**hyperparams)
-            print(f"모델 생성 성공 (외부): {model}")
-        elif model_selected == 'GradientBoostingRegressor':
-            model = GradientBoostingRegressor(**hyperparams)
-            print(f"모델 생성 성공 (외부): {model}")
-        else:
-            # 그 외 모델은 기존 로직 유지
-            model = create_model(model_selected, input_size, hyperparams=hyperparams)
-            print(f"모델 생성 성공: {model}")  # 디버깅용
-            if not model:
-                raise ValueError("모델 생성 실패")
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"모델 생성 중 오류 발생: {str(e)}"}), 500
-
-    # 폴더 생성
     
-    model_path = os.path.join(save_dir, f"{model_name}.pt" if isinstance(model, torch.nn.Module) else f"{model_name}.pkl")
-    modeldata_path = os.path.join(save_dir, f"{model_name}.json")
-    creation_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     '''-----------------------------제약 조건에 따라서 모델 생성 ------------------------------'''
     # (2) 메타데이터 로드 & constraints 생성
@@ -322,10 +298,45 @@ def save_model():
     if erase_cols:
         print(f"[DEBUG] 변동이 없는(최소=최대) 열들: {erase_cols}. 학습에서 제외합니다.")
         df.drop(columns=erase_cols, inplace=True)
+
+    # (B) 메타데이터 필터링
+    # 기존 metadata_list에서, erase_cols에 해당하는 column의 item은 제외
+    filtered_metadata = [
+        item for item in metadata_list 
+        if item['column'] not in erase_cols
+    ]
+    # 모델 생성
+    if input_size is not None:
+                # user가 준 input_size에서 erase_cols 만큼 빼준다
+                new_input_size = input_size - len(erase_cols)
+                if new_input_size < 1:
+                    raise ValueError(f"유효한 input_size가 아닙니다 (지워진 컬럼이 너무 많음).")
+                hyperparams["input_size"] = new_input_size
+                input_size = new_input_size
+    
+    try:
+        # GradientBoostingRegressor 또는 RandomForestRegressor일 경우 외부에서 생성
+        if model_selected == 'RandomForestRegressor':
+            model = RandomForestRegressor(**hyperparams)
+            print(f"모델 생성 성공 (외부): {model}")
+        elif model_selected == 'GradientBoostingRegressor':
+            model = GradientBoostingRegressor(**hyperparams)
+            print(f"모델 생성 성공 (외부): {model}")
+        else:
+            # 그 외 모델은 기존 로직 유지
+            model = create_model(model_selected, input_size, hyperparams=hyperparams)
+            print(f"모델 생성 성공: {model}")  # 디버깅용
+            if not model:
+                raise ValueError("모델 생성 실패")
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"모델 생성 중 오류 발생: {str(e)}"}), 500
+
+    
         
     # constraints 구성
     constraints = {}
-    for item in metadata_list:
+    for item in  filtered_metadata:
         col_name = item['column']       # "att1" 등
         unit_val = float(item['unit'])  # 5, 0.5 등
         min_val  = float(item['min'])   # 예: 0
@@ -374,7 +385,11 @@ def save_model():
         print(f"모델 학습 중 오류 발생: {str(e)}")
         return jsonify({"status": "error", "message": f"모델 학습 중 오류 발생: {str(e)}"}), 500
     
+    # 폴더 생성
     
+    model_path = os.path.join(save_dir, f"{model_name}.pt" if isinstance(model, torch.nn.Module) else f"{model_name}.pkl")
+    modeldata_path = os.path.join(save_dir, f"{model_name}.json")
+    creation_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
    # 모델 저장
     try:
@@ -780,13 +795,16 @@ def submit_prediction():
 
         with open(metadata_path, 'r', encoding='utf-8') as f:
             stored_metadata = json.load(f)
-        
+        units = [item['unit'] for item in stored_metadata]
+        lower_bound = [item['min'] for item in stored_metadata]
+        upper_bound = [item['max'] for item in stored_metadata]
         # (2) column -> unit 매핑 (예: {'att1': 5.0, 'att2': 5.0, ...})
         #     min/max를 쓰는 로직이 필요하다면 비슷한 방식으로 매핑해두고 활용할 수 있음
-        units_map = {}
-        for m in stored_metadata:
-            col = m['column']
-            units_map[col] = float(m['unit'])  # 이미 float으로 저장되었지만 혹시 몰라 float() 처리
+
+        # units_map = {}
+        # for m in stored_metadata:
+        #     col = m['column']
+        #     units_map[col] = float(m['unit'])  # 이미 float으로 저장되었지만 혹시 몰라 float() 처리
 
         # CSV -> DataFrame 로드
         df = pd.read_csv(data_file_path).drop_duplicates()
@@ -825,6 +843,7 @@ def submit_prediction():
             return jsonify({'status': 'error', 'message': f'Data file not found: {data["filename"]}'}), 400
 
         df = pd.read_csv(data_file_path).drop_duplicates()
+        print(df.shape)
         # model_list = process_models(data['models'])
         
         models = None
@@ -852,28 +871,61 @@ def submit_prediction():
 
         if not os.path.exists(metadata_path):
             raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
-
         with open(metadata_path, 'r', encoding='utf-8') as f:
             metadata_list = json.load(f)
+        # -----------------------------------------------------------------------------
+        # ### (A) 각 열의 min == max인 경우, 해당 열을 erase_cols에 추가 후 학습에서 제외
+        # -----------------------------------------------------------------------------
+        erase_cols = []
+        erase_indices = []  # 삭제할 컬럼들의 인덱스 저장
+        for idx,col in enumerate(df.columns):
+            if col == 'Target':
+                continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
+            if df[col].min() == df[col].max():
+                erase_cols.append(col)
+                erase_indices.append(idx)  # 컬럼의 인덱스도 추가
+
+        if erase_cols:
+            print(f"[DEBUG] 변동이 없는(최소=최대) 열들: {erase_cols}. 학습에서 제외합니다.")
+            df.drop(columns=erase_cols, inplace=True)
+
+        # (B) 메타데이터 필터링
+        # 기존 metadata_list에서, erase_cols에 해당하는 column의 item은 제외
+        filtered_metadata = [
+            item for item in metadata_list 
+            if item['column'] not in erase_cols
+        ]
+        # (C) erase_indices를 사용해 리스트들 필터링
+        def filter_by_indices(original_list, indices_to_remove):
+            """indices_to_remove에 해당하는 원소를 original_list에서 제거"""
+            return [val for idx, val in enumerate(original_list) if idx not in indices_to_remove]
+                # data_type, decimal_place, starting_point 필터링
+        
+
         # 변환할 딕셔너리 초기화
-        units = {}
-        max_boundary = {}
-        min_boundary = {}
-
+        units = []
+        max_boundary = []
+        min_boundary = []
+        data_type = [int, int, int, float, int, int, int, int, int, int, float, int, int, int, int]
+        decimal_place = [0, 0, -1, 1, 0, 0, 0, 0, 0, -1, 2, 0, 0, -1, 0]
+        starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
+        
         # 각 metadata 항목을 순회하며, column명을 key로 하여 value를 저장
-        for item in metadata_list:
-            col = item["column"]
-            units[col] = item["unit"]
-            max_boundary[col] = item["max"]
-            min_boundary[col] = item["min"]
-
-        # 최종 구조
-        combined_metadata = {
-            "units": units,
-            "max_boundary": max_boundary,
-            "min_boundary": min_boundary
-        }
-        print(combined_metadata)
+        # filtered_metadata에서 배열 값 추출
+        for item in filtered_metadata:
+            units.append(item["unit"])
+            max_boundary.append(item["max"])
+            min_boundary.append(item["min"])
+        data_type = filter_by_indices(data_type, erase_indices)
+        decimal_place = filter_by_indices(decimal_place, erase_indices)
+        starting_point = filter_by_indices(starting_point, erase_indices)
+        
+        print(units)
+        print(max_boundary)
+        print(min_boundary)
+        print(data_type)
+        print(decimal_place)
+        print(starting_point)
 
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
@@ -883,7 +935,7 @@ def submit_prediction():
 
         for model_name in data['models']:
             model_dir = os.path.join(MODEL_FOLDER, model_name)
-            metadata_path = os.path.join(model_dir, f"{model_name}.json")
+            model_metadata_path = os.path.join(model_dir, f"{model_name}.json")
             model_path = os.path.join(model_dir, f"{model_name}.pkl")
             
             if not os.path.exists(metadata_path):
@@ -892,13 +944,13 @@ def submit_prediction():
 
             try:
                 # 메타데이터 로드
-                with open(metadata_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
+                with open(model_metadata_path, 'r', encoding='utf-8') as f:
+                    model_metadata = json.load(f)
 
-                framework = metadata.get('framework')
-                model_selected = metadata.get('model_selected')
-                hyperparams = metadata.get('parameters', {})
-                input_size = metadata.get('input_size', None)
+                framework = model_metadata.get('framework')
+                model_selected = model_metadata.get('model_selected')
+                hyperparams = model_metadata.get('parameters', {})
+                input_size = model_metadata.get('input_size', None)
                 model_path = ""
                 print(model_selected)
                 # framework에 따라 model_path 설정
@@ -942,8 +994,8 @@ def submit_prediction():
                 continue
 
         print("모델 생성/로딩 완료:")
-        for idx, m in enumerate(models_list):
-            print(f"{idx+1}. {m}")
+        # for idx, m in enumerate(models_list):
+        #     print(f"{idx+1}. {m}")
 
         # 파일 이름 생성
         print(data['save_name'])
@@ -962,12 +1014,12 @@ def submit_prediction():
         if not os.path.exists(subfolder_path):
             os.makedirs(subfolder_path)
         
-        models = None # models = [model, model, model, ...]
-        desired = 555
-        mode = 'local'
-        modeling = 'averaging'
-        strategy = 'exhaustive'
-        tolerance = 2
+        
+        desired = 510
+        mode = 'global'
+        modeling = 'single'
+        strategy = 'stochastic'
+        tolerance = 1
         beam_width = 5
         num_candidates = 5
         escape = True
@@ -975,19 +1027,23 @@ def submit_prediction():
         index = 0
         up = True
         alternative = 'keep_move'
+        # print(models)
+        # print(models_list)
+        print(erase_cols)
+        print(df.shape)
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
-        configurations, predictions, best_config, best_pred, pred_all  = run(data = data, models = models,
+        configurations, predictions, best_config, best_pred, pred_all  = parameter_prediction(data = df, models = models_list,
                                                           desired = desired,
                                                           starting_point = starting_point, 
                                                           mode = mode, modeling = modeling,
                                                           strategy = strategy, tolerance = tolerance, 
                                                           beam_width = beam_width,
-                                                          num_cadidates = num_candidates, escape = escape, 
+                                                          num_candidates = num_candidates, escape = escape, 
                                                           top_k = top_k, index = index,
                                                           up = up, alternative = alternative,
-                                                          unit = unit,
+                                                          unit = units,
                                                           lower_bound = lower_bound, 
                                                           upper_bound = upper_bound, 
                                                           data_type = data_type, decimal_place = decimal_place)
@@ -1126,7 +1182,9 @@ def rerun_prediction():
 
         with open(metadata_path, 'r', encoding='utf-8') as f:
             stored_metadata = json.load(f)
-
+        units = [item['unit'] for item in stored_metadata]
+        lower_bound = [item['min'] for item in stored_metadata]
+        upper_bound = [item['max'] for item in stored_metadata]
         # (원하는 대로 min_boundary, max_boundary, unit 등 로드)
         # ...
 

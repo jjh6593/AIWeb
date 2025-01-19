@@ -1,0 +1,36 @@
+{
+    "model_type": "scikit",
+    "model_name": "SVR",
+    "model_selected": "SVR",
+    "parameters": {
+        "kernel": "rbf",
+        "degree": 3,
+        "C": 1,
+        "epsilon": 0.1
+    },
+    "framework": "sklearn",
+    "model_path": "models\\SVR\\SVR.pkl",
+    "input_size": null,
+    "train_loss": 0.013533198190470767,
+    "csv_filename": "24-learning.csv",
+    "val_loss": 0.019238409685306282,
+    "creation_time": "2025-01-19 15:00:57",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.013533198190470767,
+            "train_rmse": 0.11633227493035098,
+            "train_rae": 116.30761076667461,
+            "val_mse": 0.019238409685306282,
+            "val_rmse": 0.13870259437121674,
+            "val_rae": 27.557442173986658
+        },
+        "original": {
+            "train_mse": 231617.56086112512,
+            "train_rmse": 481.26662138686197,
+            "train_rae": 116.30761076667461,
+            "val_mse": 329260.9376913797,
+            "val_rmse": 573.8126329137236,
+            "val_rae": 27.557442173986654
+        }
+    }
+}

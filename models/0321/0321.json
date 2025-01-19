@@ -1,0 +1,33 @@
+{
+    "model_type": "scikit",
+    "model_name": "0321",
+    "model_selected": "LinearRegressor",
+    "parameters": {
+        "fit_intercept": true
+    },
+    "framework": "sklearn",
+    "model_path": "models\\0321\\0321.pkl",
+    "input_size": null,
+    "train_loss": 0.0069712287470435515,
+    "csv_filename": "24-learning.csv",
+    "val_loss": 0.013456242387165071,
+    "creation_time": "2025-01-19 06:08:49",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.0069712287470435515,
+            "train_rmse": 0.08349388448888667,
+            "train_rae": 0.20863503848920728,
+            "val_mse": 0.013456242387165071,
+            "val_rmse": 0.11600104476755832,
+            "val_rae": 0.2686691733224175
+        },
+        "original": {
+            "train_mse": 119310.97057330943,
+            "train_rmse": 345.4142014644294,
+            "train_rae": 124.28302443190007,
+            "val_mse": 230300.46414635156,
+            "val_rmse": 479.8963056185696,
+            "val_rae": 28.99315337095324
+        }
+    }
+}
