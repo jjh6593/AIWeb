@@ -1,0 +1,32 @@
+{
+    "filename": "24-learning.csv",
+    "save_name": "Global_MLPXG_Top_K",
+    "desire": 553.0,
+    "option": "global",
+    "modeling_type": "Ensemble",
+    "strategy": "Beam",
+    "models": [
+        "XGB",
+        "SVR"
+    ],
+    "starting_points": {
+        "att1": 150,
+        "att2": 25,
+        "att3": 40,
+        "att4": 1,
+        "att5": 120,
+        "att6": 250,
+        "att7": 10,
+        "att8": 25,
+        "att9": 25,
+        "att10": 900,
+        "att11": 0.25,
+        "att12": 2,
+        "att13": 100,
+        "att14": 1800,
+        "att15": 2000
+    },
+    "tolerance": "5",
+    "beam_width": "3",
+    "timestamp": "2025-01-20_02-57-41"
+}

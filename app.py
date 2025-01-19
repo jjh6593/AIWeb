@@ -849,13 +849,13 @@ def submit_prediction():
         # model_list = process_models(data['models'])
         
         models = None
-        mode = data['option']
+        mode = data['option'].lower()
         print(mode)
-        desired = data['desire']
+        desired = int(data['desire'])
         print(desired)
-        modeling = data['modeling_type']
+        modeling = data['modeling_type'].lower()
         print(modeling)
-        strategy = data['strategy']
+        strategy = data['strategy'].lower()
         print(strategy)
         tolerance = data.get('tolerance', None)
         beam_width = data.get('beam_width', None)
@@ -864,7 +864,7 @@ def submit_prediction():
         escape = data.get('escape', True)
         top_k = data.get('top_k', 2)
         index = data.get('index', 0)
-        up = data.get('up', 0)
+        up = data.get('up', True)
         alternative = data.get('alternative', 'keep_move')
         # ============================
         # 기존 제약조건 가져오기
@@ -881,13 +881,6 @@ def submit_prediction():
         erase_cols = []
         erase_indices = []  # 삭제할 컬럼들의 인덱스 저장
         feature_cols = [col for col in df.columns if col != 'Target']
-
-        # for idx,col in enumerate(df.columns):
-        #     if col == 'Target':
-        #         continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
-        #     if df[col].min() == df[col].max():
-        #         erase_cols.append(col)
-        #         erase_indices.append(idx)  # 컬럼의 인덱스도 추가
 
         for idx, col in enumerate(feature_cols):
             if df[col].min() == df[col].max():
@@ -940,8 +933,6 @@ def submit_prediction():
         print(starting_point)
         # starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
         starting_point = filter_by_indices(starting_point, erase_indices)
-        
-        
 
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
@@ -1031,34 +1022,29 @@ def submit_prediction():
             os.makedirs(subfolder_path)
         
         
-        # desired = 510
+        # alternative = 'keep_move'
+        models = data['models']
+        print(f'models : {models}')
+        print(f'model_list{models_list}')
+        # max_boundary 및 min_boundary를 DataFrame에서 직접 추출
+        # ---------------------------------------min,max 값일일히 설정하는거 방지-------------------------------------------------
+        upper_bound = df.max().tolist()  # 각 컬럼의 최대값
+        lower_bound = df.min().tolist()  # 각 컬럼의 최소값
+        
+        # desired = int(desired)
+        # desired = 550
         # mode = 'global'
         # modeling = 'ensemble'
-        # strategy = 'beam'
-        # tolerance = 1
-        # beam_width = 5
-        # num_candidates = 5
-        # escape = True
+        # strategy = 'stochastic'
+        tolerance = 1
+        beam_width = 5
+        num_candidates = 5
+        escape = True
         # top_k = 2
         # index = 0
         # up = True
-        # alternative = 'keep_move'
-        # print(models)
-        # print(models_list)
-        # max_boundary 및 min_boundary를 DataFrame에서 직접 추출
-        max_boundary = df.max().tolist()  # 각 컬럼의 최대값
-        min_boundary = df.min().tolist()  # 각 컬럼의 최소값
-        print(units)
-        print(max_boundary)
-        print(min_boundary)
-        print(len(data_type))
-        print(len(decimal_place))
-        print(starting_point)
-        print(data_type)
-        print("DEBUG: data_type types:", [type(dt) for dt in data_type])
-        print(erase_cols)
-        print(df.shape)
-        # pred_all = None  # 미리 선언
+        alternative = 'keep_move'
+        pred_all = None  # 미리 선언
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
@@ -1086,11 +1072,8 @@ def submit_prediction():
         predictions = convert_to_python_types(predictions)
         best_config = convert_to_python_types(best_config)
         best_pred = convert_to_python_types(best_pred)
-        # pred_all = convert_to_python_types(pred_all)
+        pred_all = convert_to_python_types(pred_all)
         
-        print(f'predictions = {predictions}')
-        print(f'best_config = {configurations}')
-        print(f'erase = {erase_cols}')
         if pred_all is not None and pred_all:
             pred_all = convert_to_python_types(pred_all)
 
@@ -1158,14 +1141,17 @@ def rerun_prediction():
         # 우선순위: 새 data 값 > old_input_data 값
         # (기본적으로 old_input_data를 복사한 뒤, 새 data에 있는 키는 덮어쓴다)
         combined_data = old_input_data.copy()
+        
         for key, val in data.items():
             # 일부 key만 업데이트, 혹은 모든 key 업데이트 등 원하는 로직에 따라
             combined_data[key] = val
         
         # 예: "starting_points"를 새로 받았으면 덮어씌우기
         #     만약 "desire", "strategy" 등도 바꾸고 싶다면 동일한 방법으로 진행
-        combined_data['starting_points'] = data.get('starting_points', old_input_data.get('starting_points', {}))
-        
+        # combined_data['starting_points'] = data.get('starting_points', old_input_data.get('starting_points', {}))
+        # (4-2) starting_points 업데이트: 요청에 'starting_points'가 있으면 덮어씌움
+        if 'starting_points' in data:
+            combined_data['starting_points'] = data['starting_points']
         # combined_data['desire'] = float(data.get('desire', old_input_data.get('desire', 0.0)))
         # ...
 
@@ -1193,21 +1179,70 @@ def rerun_prediction():
         units = [item['unit'] for item in stored_metadata]
         lower_bound = [item['min'] for item in stored_metadata]
         upper_bound = [item['max'] for item in stored_metadata]
+        round_values = [item['round'] for item in stored_metadata]
+        data_type = [item['data_type'] for item in stored_metadata]
         # (원하는 대로 min_boundary, max_boundary, unit 등 로드)
-        # ...
+        # 5-4) erase_cols 처리 (변동없는 열 제거)
+        erase_cols = []
+        erase_indices = []
+        feature_cols = [col for col in df.columns if col != 'Target']
+        for idx, col in enumerate(feature_cols):
+            if df[col].min() == df[col].max():
+                erase_cols.append(col)
+                erase_indices.append(idx)
+        if erase_cols:
+            df.drop(columns=erase_cols, inplace=True)
+        
+        # 5-5) 메타데이터 필터링
+        filtered_metadata = [
+            item for item in stored_metadata 
+            if item['column'] not in erase_cols
+        ]
+        
+        # 5-6) 필터링 후 배열들 재생성
+        #      submit_prediction 코드 참조
+        def filter_by_indices(original_list, indices_to_remove):
+            return [val for idx, val in enumerate(original_list) if idx not in indices_to_remove]
 
-        # 3) 모델 로딩 로직
+        # 새 units, lower_bound, upper_bound, round_values, data_type, starting_points
+        units = []
+        max_boundary = []
+        min_boundary = []
+        decimal_place = []
+        data_type_list = []
+        
+        for item in filtered_metadata:
+            units.append(item["unit"])
+            max_boundary.append(item["max"])
+            min_boundary.append(item["min"])
+            decimal_place.append(item["round"])
+            data_type_list.append(item["data_type"])
+
+        # dtype 매핑
+        data_type_mapping = {
+            'int': int,
+            'float': float,
+            'str': str,
+            'bool': bool
+        }
+        data_type_list = [data_type_mapping[dt] for dt in data_type_list]
+        # (5-7) starting_point 처리
+        #      combined_data['starting_points']는 dict로 가정
+        # sp_full = list(combined_data['starting_points'].values())
+        # sp_filtered = filter_by_indices(sp_full, erase_indices)
+        # 5-8) 모델 로드
+        model_names = combined_data['models']  # 기존 input.json 안 models
         models_list = []
         MODEL_FOLDER = 'models'
-        for model_name in combined_data['models']:
-            # 기존 /api/submit_prediction 참조
+        # 3) 모델 로딩 로직
+        for model_name in model_names:
             model_dir = os.path.join(MODEL_FOLDER, model_name)
-            metadata_path = os.path.join(model_dir, f"{model_name}.json")
-            if not os.path.exists(metadata_path):
+            model_metadata_path = os.path.join(model_dir, f"{model_name}.json")
+            if not os.path.exists(model_metadata_path):
                 logging.warning(f"No metadata found for model: {model_name}")
                 continue
 
-            with open(metadata_path, 'r', encoding='utf-8') as f:
+            with open(model_metadata_path, 'r', encoding='utf-8') as f:
                 model_metadata = json.load(f)
 
             framework = model_metadata.get('framework')
@@ -1216,97 +1251,107 @@ def rerun_prediction():
             input_size = model_metadata.get('input_size', None)
 
             if framework == 'sklearn':
-                model_path = os.path.join(model_dir, f"{model_name}.pkl")
-                if not os.path.isfile(model_path):
+                pkl_path = os.path.join(model_dir, f"{model_name}.pkl")
+                if not os.path.isfile(pkl_path):
                     continue
-                # 스켈런 모델 로드
-                model = joblib.load(model_path)
+                model = joblib.load(pkl_path)
                 models_list.append(model)
 
             elif framework == 'pytorch':
-                model_path = os.path.join(model_dir, f"{model_name}.pt")
-                # PyTorch 모델 생성 후 state_dict 로드...
+                pt_path = os.path.join(model_dir, f"{model_name}.pt")
                 model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
-                state_dict = torch.load(model_path, map_location='cpu')
-                model.load_state_dict(state_dict)
+                if os.path.isfile(pt_path):
+                    state_dict = torch.load(pt_path, map_location='cpu')
+                    model.load_state_dict(state_dict)
                 models_list.append(model)
 
             else:
                 logging.warning(f"Unsupported framework: {framework}")
+                continue
 
         # 4) parameter_prediction 실행에 필요한 인자 셋팅
         #    (원하는 로직에 맞게)
-        desired = float(combined_data['desire'])
+        
         starting_points = combined_data['starting_points']  # 예: dict 형태
-        strategy = combined_data['strategy']
-        modeling = combined_data['modeling_type']
-        mode = combined_data['option']  # local/global
+        desired = float(combined_data['desire'])
+        mode = combined_data['option']  # 'local' or 'global'
+        modeling = combined_data['modeling_type'].lower()
+        strategy = combined_data['strategy'].lower()
         tolerance = combined_data.get('tolerance', None)
         beam_width = combined_data.get('beam_width', None)
         num_candidates = combined_data.get('num_candidates', None)
         escape = combined_data.get('escape', True)
         top_k = combined_data.get('top_k', 2)
         index = combined_data.get('index', 0)
-        up = combined_data.get('up', 0)
+        up = combined_data.get('up', True)
         alternative = combined_data.get('alternative', 'keep_move')
-
+        # 5-10) df.max()/min() 이용해서 boundary 업데이트 (submit_prediction과 동일)
+        upper_bound = df.max().tolist()
+        lower_bound = df.min().tolist()
+        
         # starting_points가 dictionary일 경우, 모델에 들어갈 때 list나 numpy 변환 등이 필요할 수 있음
         # 예를 들어:
         # sp_list = [float(v) for v in starting_points.values()]  # 순서주의
 
         # 실제 parameter_prediction 호출
         # (아래는 /api/submit_prediction 예시를 그대로 차용)
-        models, training_losses, configurations, predictions, best_config, best_pred, erase = parameter_prediction(
+
+        # 5-11) parameter_prediction 호출
+        
+        configurations, predictions, best_config, best_pred, pred_all = parameter_prediction(
             data=df,
-            models=None,  # 필요시
-            model_list=models_list,  # 혹은 models_list
+            models=models_list,
             desired=desired,
-            starting_point=starting_points,  # 혹은 sp_list
+            starting_point=starting_points, 
             mode=mode,
             modeling=modeling,
             strategy=strategy,
-            tolerance=tolerance,
+            tolerance=tolerance, 
             beam_width=beam_width,
             num_candidates=num_candidates,
-            escape=escape,
+            escape=escape, 
             top_k=top_k,
             index=index,
             up=up,
-            alternative=alternative
+            alternative=alternative,
+            unit=units,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+            data_type=data_type_list,
+            decimal_place=decimal_place
         )
 
-        # 5) 결과 저장
+        # (6) 결과 저장
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         combined_data['timestamp'] = timestamp
-        
-        # 새로운 output.json 만들거나, 덮어쓰기
-        # 여기서는 버전 구분 위해 새 파일명에 timestamp를 붙임
-        new_output_file = os.path.join(subfolder_path, f"{save_name}_output_{timestamp}.json")
 
+        # output_data 생성
         configurations = convert_to_python_types(configurations)
         predictions = convert_to_python_types(predictions)
         best_config = convert_to_python_types(best_config)
         best_pred = convert_to_python_types(best_pred)
+        pred_all = convert_to_python_types(pred_all)
 
         output_data = {
-            'mode': combined_data['option'],
+            'mode': mode,
             'timestamp': timestamp,
             'configurations': configurations,
             'predictions': predictions,
             'best_config': best_config,
             'best_pred': best_pred,
-            'Target': combined_data['desire'],
-            'filename': combined_data['filename'],
-            'erase': erase
+            'Target': desired,
+            'filename': filename,
+            'erase': erase_cols,
+            'pred_all': pred_all
         }
-
-        # 새 input.json도 저장할지 여부 결정
-        # 여기서는 덮어쓰기 
-        new_input_file = os.path.join(subfolder_path, f"{save_name}_input.json")
-        with open(new_input_file, 'w', encoding='utf-8') as f:
+        print(best_config)
+        # (6-1) 새로운 input.json, output.json 저장
+        new_input_path = os.path.join(subfolder_path, f"{save_name}_input.json")
+        with open(new_input_path, 'w', encoding='utf-8') as f:
             json.dump(combined_data, f, ensure_ascii=False, indent=4)
 
-        with open(new_output_file, 'w', encoding='utf-8') as f:
+        new_output_path = os.path.join(subfolder_path, f"{save_name}_output.json")
+        with open(new_output_path, 'w', encoding='utf-8') as f:
             json.dump(output_data, f, ensure_ascii=False, indent=4)
 
         return jsonify({'status': 'success', 'data': output_data}), 200

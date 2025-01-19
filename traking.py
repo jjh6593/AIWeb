@@ -53,17 +53,27 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             f"ATT{i + 1}" for i in range(len(unit))
         ]
 
-        constraints = {
-            name: [
-                unit[i],
-                lower_bound[i],
-                upper_bound[i],
-                data_type[i],
-                decimal_place[i]
-            ]
-            for i, name in enumerate(attribute_names)
-        }
+        # constraints = {
+        #     name: [
+        #         unit[i],
+        #         lower_bound[i],
+        #         upper_bound[i],
+        #         data_type[i],
+        #         decimal_place[i]
+        #     ]
+        #     for i, name in enumerate(attribute_names)
+        # }
+        constraints = {}
+        for i, name in enumerate(attribute_names):
+        # float 혹은 int로 변환
+            u = float(unit[i])               # 단위
+            low = float(lower_bound[i])      # 하한
+            up = float(upper_bound[i])       # 상한
+            dt = data_type[i]                # str 또는 type(예: int, float)
+            dp = int(decimal_place[i])       # 소수점 자리수
 
+            constraints[name] = [u, low, up, dt, dp]
+        print(constraints)
         return constraints    
     
     constraints = create_constraints(unit = unit, 
@@ -174,7 +184,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 predictions.append(prediction)
                 gradients.append(gradient)
 
-            if modeling == 'single': return predictions[0], gradients[0], predictions
+            if modeling.lower() == 'single': return predictions[0], gradients[0], predictions
             elif modeling == 'ensemble': return sum(predictions)/len(predictions), sum(gradients)/len(gradients), predictions  
             else: raise Exception(f"[modeling error] there is no {modeling}.")
 
@@ -642,8 +652,6 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
     #     [data_type[col](value) for col, value in enumerate(configurations[row])]
     #     for row in range(len(configurations))
     # ]
-    print(configurations)
-    print('제약조건 설정')
     # best_config = [data_type[i](c) for i, c in enumerate(best_config)]
         
     return configurations, predictions, best_config, best_pred, pred_all
