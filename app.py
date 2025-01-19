@@ -129,7 +129,7 @@ def save_csv_metadata():
         }
     """
     data = request.json
-
+    print(data)
     filename = data.get('filename')
     metadata = data.get('metadata', [])
 
@@ -144,12 +144,18 @@ def save_csv_metadata():
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
     # (1) unit, min, max를 float으로 변환
+    
     for item in metadata:
         # get()에서 디폴트값 0.0 (또는 None)으로 지정해도 됨
         item['unit'] = float(item.get('unit', 0.0))
         item['min'] = float(item.get('min', 0.0))
         item['max'] = float(item.get('max', 0.0))
-        item['decimal_place'] = int(item.get('max',0.0))
+        item['round'] = int(item.get('round',0))
+        # data_type 문자열을 실제 Python 타입으로 변환
+        data_type_str = item.get('data_type', 'float').lower()
+        # 그냥 문자열 그대로 저장하기
+        item['data_type'] = data_type_str
+        
     # 메타데이터를 저장할 경로
     metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
     try:
@@ -294,6 +300,8 @@ def save_model():
             continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
         if df[col].min() == df[col].max():
             erase_cols.append(col)
+    print(erase_cols)
+    print(df.shape)
 
     if erase_cols:
         print(f"[DEBUG] 변동이 없는(최소=최대) 열들: {erase_cols}. 학습에서 제외합니다.")
@@ -307,12 +315,12 @@ def save_model():
     ]
     # 모델 생성
     if input_size is not None:
-                # user가 준 input_size에서 erase_cols 만큼 빼준다
-                new_input_size = input_size - len(erase_cols)
-                if new_input_size < 1:
-                    raise ValueError(f"유효한 input_size가 아닙니다 (지워진 컬럼이 너무 많음).")
-                hyperparams["input_size"] = new_input_size
-                input_size = new_input_size
+        # user가 준 input_size에서 erase_cols 만큼 빼준다
+        new_input_size = input_size - len(erase_cols)
+        if new_input_size < 1:
+            raise ValueError(f"유효한 input_size가 아닙니다 (지워진 컬럼이 너무 많음).")
+        hyperparams["input_size"] = new_input_size
+        input_size = new_input_size
     
     try:
         # GradientBoostingRegressor 또는 RandomForestRegressor일 경우 외부에서 생성
@@ -798,14 +806,8 @@ def submit_prediction():
         units = [item['unit'] for item in stored_metadata]
         lower_bound = [item['min'] for item in stored_metadata]
         upper_bound = [item['max'] for item in stored_metadata]
-        # (2) column -> unit 매핑 (예: {'att1': 5.0, 'att2': 5.0, ...})
-        #     min/max를 쓰는 로직이 필요하다면 비슷한 방식으로 매핑해두고 활용할 수 있음
-
-        # units_map = {}
-        # for m in stored_metadata:
-        #     col = m['column']
-        #     units_map[col] = float(m['unit'])  # 이미 float으로 저장되었지만 혹시 몰라 float() 처리
-
+        round_values = [item['round'] for item in stored_metadata]
+        data_type = [item['data_type'] for item in stored_metadata]
         # CSV -> DataFrame 로드
         df = pd.read_csv(data_file_path).drop_duplicates()
 
@@ -878,12 +880,19 @@ def submit_prediction():
         # -----------------------------------------------------------------------------
         erase_cols = []
         erase_indices = []  # 삭제할 컬럼들의 인덱스 저장
-        for idx,col in enumerate(df.columns):
-            if col == 'Target':
-                continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
+        feature_cols = [col for col in df.columns if col != 'Target']
+
+        # for idx,col in enumerate(df.columns):
+        #     if col == 'Target':
+        #         continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
+        #     if df[col].min() == df[col].max():
+        #         erase_cols.append(col)
+        #         erase_indices.append(idx)  # 컬럼의 인덱스도 추가
+
+        for idx, col in enumerate(feature_cols):
             if df[col].min() == df[col].max():
                 erase_cols.append(col)
-                erase_indices.append(idx)  # 컬럼의 인덱스도 추가
+                erase_indices.append(idx)
 
         if erase_cols:
             print(f"[DEBUG] 변동이 없는(최소=최대) 열들: {erase_cols}. 학습에서 제외합니다.")
@@ -901,14 +910,14 @@ def submit_prediction():
             return [val for idx, val in enumerate(original_list) if idx not in indices_to_remove]
                 # data_type, decimal_place, starting_point 필터링
         
-
+        
         # 변환할 딕셔너리 초기화
         units = []
         max_boundary = []
         min_boundary = []
-        data_type = [int, int, int, float, int, int, int, int, int, int, float, int, int, int, int]
-        decimal_place = [0, 0, -1, 1, 0, 0, 0, 0, 0, -1, 2, 0, 0, -1, 0]
-        starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
+        decimal_place = []
+        data_type = []
+        starting_point = []
         
         # 각 metadata 항목을 순회하며, column명을 key로 하여 value를 저장
         # filtered_metadata에서 배열 값 추출
@@ -916,16 +925,23 @@ def submit_prediction():
             units.append(item["unit"])
             max_boundary.append(item["max"])
             min_boundary.append(item["min"])
-        data_type = filter_by_indices(data_type, erase_indices)
-        decimal_place = filter_by_indices(decimal_place, erase_indices)
+            decimal_place.append(item["round"])
+            data_type.append(item["data_type"])
+        
+        data_type_mapping = {
+            'int': int,
+            'float': float,
+            'str': str,
+            'bool': bool
+        }
+        data_type = [data_type_mapping[dt] for dt in data_type]
+        
+        starting_point = list(data['starting_points'].values())
+        print(starting_point)
+        # starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
         starting_point = filter_by_indices(starting_point, erase_indices)
         
-        print(units)
-        print(max_boundary)
-        print(min_boundary)
-        print(data_type)
-        print(decimal_place)
-        print(starting_point)
+        
 
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
@@ -1015,25 +1031,38 @@ def submit_prediction():
             os.makedirs(subfolder_path)
         
         
-        desired = 510
-        mode = 'global'
-        modeling = 'single'
-        strategy = 'stochastic'
-        tolerance = 1
-        beam_width = 5
-        num_candidates = 5
-        escape = True
-        top_k = 2
-        index = 0
-        up = True
-        alternative = 'keep_move'
+        # desired = 510
+        # mode = 'global'
+        # modeling = 'ensemble'
+        # strategy = 'beam'
+        # tolerance = 1
+        # beam_width = 5
+        # num_candidates = 5
+        # escape = True
+        # top_k = 2
+        # index = 0
+        # up = True
+        # alternative = 'keep_move'
         # print(models)
         # print(models_list)
+        # max_boundary 및 min_boundary를 DataFrame에서 직접 추출
+        max_boundary = df.max().tolist()  # 각 컬럼의 최대값
+        min_boundary = df.min().tolist()  # 각 컬럼의 최소값
+        print(units)
+        print(max_boundary)
+        print(min_boundary)
+        print(len(data_type))
+        print(len(decimal_place))
+        print(starting_point)
+        print(data_type)
+        print("DEBUG: data_type types:", [type(dt) for dt in data_type])
         print(erase_cols)
         print(df.shape)
+        # pred_all = None  # 미리 선언
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
         output_file_path = os.path.join(subfolder_path, f'{save_name}_output.json')
+
         configurations, predictions, best_config, best_pred, pred_all  = parameter_prediction(data = df, models = models_list,
                                                           desired = desired,
                                                           starting_point = starting_point, 
@@ -1048,27 +1077,6 @@ def submit_prediction():
                                                           upper_bound = upper_bound, 
                                                           data_type = data_type, decimal_place = decimal_place)
         
-    
-        # models, training_loss,configurations, predictions, best_config, best_pred, erase = parameter_prediction(
-        #     data=df,  # DataFrame
-        #     models=models_list,
-        #     model_list=None,
-        #     desired=float(desired),  # 실수형으로 변환
-        #     starting_point=[float(value) for value in data['starting_points'].values()],  # 숫자 리스트로 변환
-        #     mode=mode,
-        #     modeling=modeling.lower(),
-        #     strategy=strategy.lower(),
-        #     tolerance=float(tolerance) if tolerance is not None else None,  # 실수형 변환
-        #     beam_width=int(beam_width) if beam_width is not None else None,
-        #     num_candidates=int(num_candidates),
-        #     escape=bool(escape),
-        #     top_k=int(top_k),
-        #     index=int(index),
-        #     up=bool(up),
-        #     alternative=alternative
-        # )
-        
-
         # 현재 시각(날짜) 정보
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         # 입력 데이터에도 날짜정보 추가
@@ -1078,15 +1086,14 @@ def submit_prediction():
         predictions = convert_to_python_types(predictions)
         best_config = convert_to_python_types(best_config)
         best_pred = convert_to_python_types(best_pred)
-        # print(f'predictions = {predictions}')
-        # print(f'best_config = {configurations}')
-        # print(f'erase = {erase}')
-        erase_cols = []
-        for col in df.columns:
-            if col == 'Target':
-                continue  # 타겟열은 무조건 사용한다는 가정 (원하면 이 조건 제거)
-            if df[col].min() == df[col].max():
-                erase_cols.append(col)
+        # pred_all = convert_to_python_types(pred_all)
+        
+        print(f'predictions = {predictions}')
+        print(f'best_config = {configurations}')
+        print(f'erase = {erase_cols}')
+        if pred_all is not None and pred_all:
+            pred_all = convert_to_python_types(pred_all)
+
         output_data = {
             'mode': data['option'],
             'timestamp': timestamp,  # output에도 동일 날짜 정보
@@ -1096,7 +1103,8 @@ def submit_prediction():
             'best_pred': best_pred,
             'Target': data['desire'],
             'filename': data['filename'],
-            'erase': {erase_cols}
+            'erase': erase_cols,
+            'pred_all': pred_all
         }
 
         # 데이터 저장
@@ -1270,7 +1278,7 @@ def rerun_prediction():
         # 5) 결과 저장
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         combined_data['timestamp'] = timestamp
-
+        
         # 새로운 output.json 만들거나, 덮어쓰기
         # 여기서는 버전 구분 위해 새 파일명에 timestamp를 붙임
         new_output_file = os.path.join(subfolder_path, f"{save_name}_output_{timestamp}.json")
@@ -1346,7 +1354,9 @@ def get_training_results():
                         'best_config': output_data.get('best_config'),
                         'best_pred': output_data.get('best_pred'),
                         'hyperparameter': hyperparams_data,
-                        'erase': output_data.get('erase')
+                        'erase': output_data.get('erase'),
+                        'pred_all':output_data.get('pred_all')
+
                     })
             except Exception as e:
                 print(f"Error reading {output_file_path}: {e}")

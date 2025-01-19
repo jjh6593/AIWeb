@@ -1,0 +1,39 @@
+{
+    "model_type": "pytorch",
+    "model_name": "MLP3",
+    "model_selected": "MLP_3",
+    "parameters": {
+        "input_size": 9,
+        "hidden_size_1": 32,
+        "hidden_size_2": 32,
+        "hidden_size_3": 32,
+        "learning_rate": 0.001,
+        "epochs": 100,
+        "batch_size": 32
+    },
+    "framework": "pytorch",
+    "model_path": "models/MLP3/MLP3.pt",
+    "input_size": 9,
+    "train_loss": 0.03843337429014055,
+    "csv_filename": "24-learning.csv",
+    "val_loss": 0.042339163181669054,
+    "creation_time": "2025-01-19 17:47:44",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.03843337429014055,
+            "train_rmse": 0.19604431715849494,
+            "train_rae": 105.62281237928194,
+            "val_mse": 0.042339163181669054,
+            "val_rmse": 0.20576482493776493,
+            "val_rae": 26.307546987703084
+        },
+        "original": {
+            "train_mse": 657778.3138068079,
+            "train_rmse": 811.0353344995567,
+            "train_rae": 105.62281224330887,
+            "val_mse": 724624.9845244628,
+            "val_rmse": 851.2490731416175,
+            "val_rae": 26.307546887666486
+        }
+    }
+}

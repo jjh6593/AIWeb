@@ -454,7 +454,9 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
                 if step % 10 == 0 and step != 0 : print(f"Step {step} Target : {self.desired}, Prediction : {beam_predictions}")
                 select = np.argsort(candidates_score)[::-1][:self.beam_width]
-                new_positions = [torch.tensor(candidates[s], dtype = dtype) for s in select]
+                # 오류 메시지 제거
+                # new_positions = [torch.tensor(candidates[s], dtype = dtype) for s in select]
+                new_positions = [candidates[s].clone().detach().to(dtype) for s in select]
 
                 if len(beam_predictions) == 1 : beam_predictions = list(np.repeat(beam_predictions[0],self.beam_width))
                 self.beam_positions.append(new_positions)
@@ -607,7 +609,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
     target = MinMaxScaling(data['Target'])
     feature = MinMaxScaling(data[[column for column in data.columns if column != 'Target']])
     print('scaling done')
-    configurations, predictions, best_config, best_pred = None, None, None, None
+    configurations, predictions, best_config, best_pred, pred_all = None, None, None, None, None
     if mode == 'global' :
         G = GlobalMode(desired = desired, models = models, modeling = modeling, strategy = strategy)
         if strategy == 'beam':
@@ -636,11 +638,12 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
         predictions = predictions[1:]
         pred_all = pred_all[1:]
         
-    configurations = [
-        [data_type[col](value) for col, value in enumerate(configurations[row])]
-        for row in range(len(configurations))
-    ]
+    # configurations = [
+    #     [data_type[col](value) for col, value in enumerate(configurations[row])]
+    #     for row in range(len(configurations))
+    # ]
+    print(configurations)
     print('제약조건 설정')
-    best_config = [data_type[i](c) for i, c in enumerate(best_config)]
+    # best_config = [data_type[i](c) for i, c in enumerate(best_config)]
         
     return configurations, predictions, best_config, best_pred, pred_all
