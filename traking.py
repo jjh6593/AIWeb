@@ -75,14 +75,19 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             constraints[name] = [u, low, up, dt, dp]
         print(constraints)
         return constraints    
-    
+    if starting_point is None:
+        raise ValueError("starting_point cannot be None")
+    if desired is None:
+        raise ValueError("desired cannot be None")
+
+
     constraints = create_constraints(unit = unit, 
                                      lower_bound = lower_bound, 
                                      upper_bound = upper_bound, 
                                      data_type = data_type, 
                                      decimal_place = decimal_place)    
     
-
+    
 
     class MinMaxScaling:
         """
@@ -522,8 +527,11 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 elif prediction_avg < y_prime: x_prime += adjustment
                 else: pass
                 x_prime = super().bounding(x_prime)
+                
 
                 prediction_original = target.denormalize(prediction_avg)
+                if prediction_original is None:
+                    raise ValueError(f"Step {step}: prediction_original is None")
                 prediction_original = prediction_original[0]
                 
              #   prediction_original_all = target.denormalize(predictions_all)
@@ -551,6 +559,8 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
         def best_one(self, starting_point, escape = True) :
             y_prime = self.desired / (target.max[0] - target.min[0])
             tolerance = self.tolerance
+            if starting_point is None or not isinstance(starting_point, (list, np.ndarray)):
+                raise ValueError("Invalid starting_point input")
 
             x_i = [starting_point[i] / (feature.max[i] - feature.min[i]) for i in range(input_size)]  
             x_prime = torch.tensor([x_i[i] - (x_i[i] % self.unit_by_feature[i]) for i in range(len(self.unit_by_feature))], 
@@ -583,6 +593,10 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 if gradient_avg[chosen] >= 0: adjustment[chosen] += self.unit_by_feature[chosen]
                 else: adjustment[chosen] -= self.unit_by_feature[chosen]
                 adjustment = np.array(adjustment)
+                if prediction_avg is None or y_prime is None:
+                    raise ValueError("Error: 'prediction_avg' or 'y_prime' is None. Model output needs validation.")
+
+                print(f"Debug - Step {step}: prediction_avg={prediction_avg}, y_prime={y_prime}")
 
                 if prediction_avg > y_prime: x_prime -= adjustment 
                 elif prediction_avg < y_prime: x_prime += adjustment
@@ -601,12 +615,16 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 self.best_one_configurations.append(configuration)
                 self.prediction_all.append([target.denormalize([e.item()])[0] for e in predictions])
 
-                
+                if memory is None:
+                    memory = []
                 memory.append(prediction_original)
                 if len(memory) > memory_size : memory = memory[len(memory)-memory_size:]
                 if len(memory) == 5 and len(set(memory)) < 3  and previous == chosen: avoid.append(chosen)
 
                 if abs(prediction_avg - y_prime) < tolerance: break
+                if not isinstance(input_size, int) or input_size <= 0:
+                    raise ValueError("input_size must be a positive integer")
+
                 if escape and len(avoid) == input_size : break
                 previous = chosen
             best = np.argsort(abs(np.array(self.best_one_predictions)-self.desired))[0]

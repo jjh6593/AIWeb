@@ -76,7 +76,46 @@ def handle_options_request():
         response.headers.add("Access-Control-Max-Age", "3600")
         return response
 
+# 0 CSV 파일 및 메타데이터 삭제
+@app.route('/api/delete_csv', methods=['POST'])
+def delete_csv():
+    """
+    업로드된 CSV 파일과 해당 메타데이터를 삭제하는 API 엔드포인트.
+    - 요청 예:
+        {
+          "filename": "example.csv"
+        }
+    - 응답 예:
+        {
+          "status": "success",
+          "message": "CSV file and metadata deleted successfully."
+        }
+    """
+    data = request.json
+    filename = data.get('filename')
 
+    if not filename:
+        return jsonify({'status': 'error', 'message': 'filename 파라미터가 필요합니다.'}), 400
+
+    # CSV 파일 및 메타데이터 경로 지정
+    csv_path = os.path.join(UPLOAD_FOLDER, filename)
+    metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
+
+    try:
+        # CSV 파일 삭제
+        if os.path.exists(csv_path):
+            os.remove(csv_path)
+        else:
+            return jsonify({'status': 'error', 'message': 'CSV 파일이 존재하지 않습니다.'}), 404
+
+        # 메타데이터 파일 삭제 (없어도 에러 없이 진행)
+        if os.path.exists(metadata_path):
+            os.remove(metadata_path)
+
+        return jsonify({'status': 'success', 'message': 'CSV 파일 및 메타데이터가 삭제되었습니다.'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 # 1 CSV 파일 업로드
 @app.route('/api/upload_csv', methods=['POST'])
 def upload_csv():
@@ -850,21 +889,37 @@ def submit_prediction():
         
         models = None
         mode = data['option'].lower()
-        print(mode)
         desired = int(data['desire'])
-        print(desired)
         modeling = data['modeling_type'].lower()
-        print(modeling)
         strategy = data['strategy'].lower()
-        print(strategy)
         tolerance = data.get('tolerance', None)
         beam_width = data.get('beam_width', None)
         num_candidates = data.get('num_candidates', None)
-        print(f"num_candidates = {num_candidates}")
-        escape = data.get('escape', True)
+        
         top_k = data.get('top_k', 2)
         index = data.get('index', 0)
+        converted_values = {}
+        params = ['tolerance', 'beam_width', 'num_candidates', 'top_k', 'index']
+        for param in params:
+            value = data.get(param, None)
+            try:
+                converted_values[param] = int(value) if value is not None else None
+            except ValueError:
+                converted_values[param] = None
+
+        tolerance = converted_values['tolerance']
+        beam_width = converted_values['beam_width']
+        num_candidates = converted_values['num_candidates']
+        top_k = converted_values['top_k']
+        index = converted_values['index']
+        print(f"num_candidates = {num_candidates}")
+        escape = data.get('escape', True)
         up = data.get('up', True)
+        # 문자열로 들어온 경우 처리
+        if isinstance(escape, str):
+            escape = escape.lower() == 'true'
+        if isinstance(up, str):
+            up = escape.lower() == 'true'
         alternative = data.get('alternative', 'keep_move')
         # ============================
         # 기존 제약조건 가져오기
@@ -1036,14 +1091,23 @@ def submit_prediction():
         # mode = 'global'
         # modeling = 'ensemble'
         # strategy = 'stochastic'
-        tolerance = 1
-        beam_width = 5
-        num_candidates = 5
-        escape = True
+        # tolerance = 1
+        # beam_width = 5
+        # num_candidates = 5
+        
+        if strategy == "best one":
+            strategy = "best_one"
+        print(f'strategy : {strategy}')
+        print(f'desired : {desired}')
+        print(f'desired type : {type(desired)}')
+        print(f'tolerance : {tolerance}')
+        print(f'beam_width : {beam_width}')
+        print(f'num_candidates : {num_candidates}')
+        print(f'escape : {escape}')
         # top_k = 2
         # index = 0
         # up = True
-        alternative = 'keep_move'
+        # alternative = 'keep_move'
         pred_all = None  # 미리 선언
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
@@ -1232,48 +1296,75 @@ def rerun_prediction():
         # sp_filtered = filter_by_indices(sp_full, erase_indices)
         # 5-8) 모델 로드
         model_names = combined_data['models']  # 기존 input.json 안 models
+        print(model_names)
         models_list = []
         MODEL_FOLDER = 'models'
         # 3) 모델 로딩 로직
         for model_name in model_names:
             model_dir = os.path.join(MODEL_FOLDER, model_name)
             model_metadata_path = os.path.join(model_dir, f"{model_name}.json")
-            if not os.path.exists(model_metadata_path):
-                logging.warning(f"No metadata found for model: {model_name}")
+            model_path = os.path.join(model_dir, f"{model_name}.pkl")
+            
+            if not os.path.exists(metadata_path):
+                logging.error(f"No metadata found for model: {model_name}")
                 continue
 
-            with open(model_metadata_path, 'r', encoding='utf-8') as f:
-                model_metadata = json.load(f)
+            try:
+                # 메타데이터 로드
+                with open(model_metadata_path, 'r', encoding='utf-8') as f:
+                    model_metadata = json.load(f)
 
-            framework = model_metadata.get('framework')
-            model_selected = model_metadata.get('model_selected')
-            hyperparams = model_metadata.get('parameters', {})
-            input_size = model_metadata.get('input_size', None)
-
-            if framework == 'sklearn':
-                pkl_path = os.path.join(model_dir, f"{model_name}.pkl")
-                if not os.path.isfile(pkl_path):
+                framework = model_metadata.get('framework')
+                model_selected = model_metadata.get('model_selected')
+                hyperparams = model_metadata.get('parameters', {})
+                input_size = model_metadata.get('input_size', None)
+                model_path = ""
+                print(model_selected)
+                # framework에 따라 model_path 설정
+                if framework == 'sklearn':
+                    model_path = os.path.join(model_dir, f"{model_name}.pkl")
+                elif framework == 'pytorch':
+                    model_path = os.path.join(model_dir, f"{model_name}.pt")
+                else:
+                    logging.error(f"Unsupported framework '{framework}' for model: {model_name}")
                     continue
-                model = joblib.load(pkl_path)
+                if framework == 'sklearn':
+                    # (1) pkl 파일이 존재하면 바로 불러오기
+                    try:
+                        with open(model_path, 'rb') as pf:
+                            model = joblib.load(pf)
+                        print(f"모델 로드 성공 (pkl): {model}")
+                    except Exception as e:
+                        logging.error(f"Error while loading model '{model_name}' from pkl: {e}")
+                        continue
+
+                elif framework == 'pytorch':
+                    # PyTorch 모델 로드 로직 (기존 그대로 유지)
+                    model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
+                    if not model:
+                        raise ValueError(f"PyTorch 모델 생성 실패: {model_name}")
+                    print(f"PyTorch 모델 생성 성공: {model}")
+
+                    if os.path.isfile(model_path):
+                        state_dict = torch.load(model_path, map_location='cpu')
+                        model.load_state_dict(state_dict)
+                        print(f"PyTorch 모델 파라미터 로드 성공: {model}")
+
+                else:
+                    raise ValueError(f"지원되지 않는 프레임워크입니다: {framework}")
+
+                # 완성된 모델 리스트에 추가
                 models_list.append(model)
 
-            elif framework == 'pytorch':
-                pt_path = os.path.join(model_dir, f"{model_name}.pt")
-                model = create_model(model_selected, input_size=input_size, hyperparams=hyperparams)
-                if os.path.isfile(pt_path):
-                    state_dict = torch.load(pt_path, map_location='cpu')
-                    model.load_state_dict(state_dict)
-                models_list.append(model)
-
-            else:
-                logging.warning(f"Unsupported framework: {framework}")
+            except Exception as e:
+                logging.error(f"Error while creating/loading model '{model_name}': {e}")
                 continue
 
         # 4) parameter_prediction 실행에 필요한 인자 셋팅
         #    (원하는 로직에 맞게)
         
         starting_points = combined_data['starting_points']  # 예: dict 형태
-        desired = float(combined_data['desire'])
+        desired = int(combined_data['desire'])
         mode = combined_data['option']  # 'local' or 'global'
         modeling = combined_data['modeling_type'].lower()
         strategy = combined_data['strategy'].lower()
@@ -1281,6 +1372,9 @@ def rerun_prediction():
         beam_width = combined_data.get('beam_width', None)
         num_candidates = combined_data.get('num_candidates', None)
         escape = combined_data.get('escape', True)
+        # 문자열로 들어온 경우 처리
+        if isinstance(escape, str):
+            escape = escape.lower() == 'true'
         top_k = combined_data.get('top_k', 2)
         index = combined_data.get('index', 0)
         up = combined_data.get('up', True)
@@ -1295,9 +1389,44 @@ def rerun_prediction():
 
         # 실제 parameter_prediction 호출
         # (아래는 /api/submit_prediction 예시를 그대로 차용)
+        converted_values = {}
+        params = ['tolerance', 'beam_width', 'num_candidates', 'top_k', 'index']
+        for param in params:
+            value = data.get(param, None)
+            try:
+                converted_values[param] = int(value) if value is not None else None
+            except ValueError:
+                converted_values[param] = None
 
+        tolerance = converted_values['tolerance']
+        beam_width = converted_values['beam_width']
+        num_candidates = converted_values['num_candidates']
+        top_k = converted_values['top_k']
+        index = converted_values['index']
+        print(f"num_candidates = {num_candidates}")
+        escape = data.get('escape', True)
+        up = data.get('up', True)
+        # 문자열로 들어온 경우 처리
+        if isinstance(escape, str):
+            escape = escape.lower() == 'true'
+        if isinstance(up, str):
+            up = escape.lower() == 'true'
         # 5-11) parameter_prediction 호출
-        
+        print(f'model_names : {model_names}')
+        print(f'df shape : {df.shape}')
+        print(f'models_list : {models_list}')
+        print(f'starting_points : {starting_points}')
+        print(f'mode : {mode}')
+        print(f'modeling : {modeling}')
+        print(f'strategy : {strategy}')
+        print(f'desired : {desired}')
+        print(f'desired type : {type(desired)}')
+        print(f'tolerance : {tolerance}')
+        print(f'beam_width : {beam_width}')
+        print(f'num_candidates : {num_candidates}')
+        print(f'escape : {escape}')
+        print(f'top_k : {top_k}')  
+        print(f'index : {index}')
         configurations, predictions, best_config, best_pred, pred_all = parameter_prediction(
             data=df,
             models=models_list,
@@ -1522,6 +1651,34 @@ def load_constraints_from_metadata(csv_filename):
 
     return constraints
 
+# -------------------------
+# 저장된 메타데이터 파일 목록 조회 API
+# -------------------------
+@app.route('/api/list_csv_metadata', methods=['GET'])
+def list_csv_metadata():
+    """
+    저장된 메타데이터 파일 목록을 조회하기 위한 엔드포인트.
+    - 요청 예:
+        /api/list_csv_metadata
+    - 응답 예:
+        {
+          "status": "success",
+          "files": [
+            "example.csv_metadata.json",
+            "data.csv_metadata.json"
+          ]
+        }
+    """
+    try:
+        metadata_files = [
+            f for f in os.listdir(METADATA_FOLDER) if f.endswith('_metadata.json')
+        ]
+        return jsonify({
+            'status': 'success',
+            'files': metadata_files
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 
