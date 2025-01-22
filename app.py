@@ -11,7 +11,7 @@ import json
 from model import create_model, _train_nn
 from data_preprocessing import MinMaxScaling
 import joblib
-from data_utils import load_data, save_data, preprocess_data, get_columns, get_data_preview
+
 # 전역에서 PyTorch와 관련 모듈 임포트
 import torch
 import torch.nn as nn
@@ -20,16 +20,25 @@ from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 import time
 from sklearn.metrics import mean_squared_error
-from train import train_pytorch_model, train_sklearn_model
+
 import logging
 from traking import parameter_prediction
 import shutil
-from sklearn.model_selection import KFold
+
 # 디버깅 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
 from flask_cors import CORS
 import numpy as np
+# Python 기본 random 모듈 시드 설정
+random.seed(42)
+
+# NumPy 시드 설정
+np.random.seed(42)
+
+# PyTorch 시드 설정 (CPU 및 GPU)
+torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)  # 모든 GPU에 적용
 app = Flask(__name__)
 
 # CORS(app)
@@ -252,26 +261,22 @@ def save_filtered_csv():
 
     return jsonify({'status': 'success', 'message': f'필터링된 데이터가 {new_filename}로 저장되었습니다.'})
 
-# 5. 데이터 설정 제출
-@app.route('/api/submit_data_settings', methods=['POST'])
-def submit_data_settings():
-    filename = request.form.get('filename')
-    target_column = request.form.get('targetColumn')
-    scaler = request.form.get('scaler')
-    missing_handling = request.form.get('missingHandling')
+# # 5. 데이터 설정 제출
+# @app.route('/api/submit_data_settings', methods=['POST'])
+# def submit_data_settings():
+#     filename = request.form.get('filename')
+#     target_column = request.form.get('targetColumn')
+#     scaler = request.form.get('scaler')
+#     missing_handling = request.form.get('missingHandling')
 
-    if not filename or not target_column:
-        return jsonify({'status': 'error', 'message': '필수 정보가 제공되지 않았습니다.'}), 400
+#     if not filename or not target_column:
+#         return jsonify({'status': 'error', 'message': '필수 정보가 제공되지 않았습니다.'}), 400
 
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    df = pd.read_csv(file_path)
+#     file_path = os.path.join(UPLOAD_FOLDER, filename)
+#     df = pd.read_csv(file_path)
 
-    # 데이터 전처리 및 저장 (필요에 따라 추가 구현 가능)
-    X, y = preprocess_data(df, target_column, scaler, missing_handling)
 
-    # 전처리된 데이터를 저장하거나 세션에 저장하는 등의 처리가 필요할 수 있습니다.
-
-    return jsonify({'status': 'success', 'message': '데이터 설정이 완료되었습니다.'})
+#     return jsonify({'status': 'success', 'message': '데이터 설정이 완료되었습니다.'})
 
 # # 6. 모델 생성
 @app.route('/api/save_model', methods=['POST'])
@@ -1200,6 +1205,19 @@ def rerun_prediction():
         with open(input_json_path, 'r', encoding='utf-8') as f:
             old_input_data = json.load(f)
 
+        # 기존 input.json 불러오기
+        output_json_path = os.path.join(subfolder_path, f"{save_name}_output.json")
+        if not os.path.exists(output_json_path):
+            return jsonify({
+                'status': 'error', 
+                'message': f'기존 input.json 파일이 {save_name} 폴더 안에 없습니다.'
+            }), 400
+
+        with open(output_json_path, 'r', encoding='utf-8') as f:
+            old_output_data = json.load(f)
+        
+        erase_list = old_output_data.get('erase',  [])
+
         # old_input_data에 들어있는 값과 새로 들어온 data를 합친다.
 
         # 우선순위: 새 data 값 > old_input_data 값
@@ -1207,20 +1225,45 @@ def rerun_prediction():
         combined_data = old_input_data.copy()
         
         for key, val in data.items():
-            # 일부 key만 업데이트, 혹은 모든 key 업데이트 등 원하는 로직에 따라
+            if key == 'starting_points':
+                continue
             combined_data[key] = val
         
-        # 예: "starting_points"를 새로 받았으면 덮어씌우기
-        #     만약 "desire", "strategy" 등도 바꾸고 싶다면 동일한 방법으로 진행
-        # combined_data['starting_points'] = data.get('starting_points', old_input_data.get('starting_points', {}))
-        # (4-2) starting_points 업데이트: 요청에 'starting_points'가 있으면 덮어씌움
-        if 'starting_points' in data:
-            combined_data['starting_points'] = data['starting_points']
-        # combined_data['desire'] = float(data.get('desire', old_input_data.get('desire', 0.0)))
-        # ...
+        # # 예: "starting_points"를 새로 받았으면 덮어씌우기
+        # #     만약 "desire", "strategy" 등도 바꾸고 싶다면 동일한 방법으로 진행
+        # # combined_data['starting_points'] = data.get('starting_points', old_input_data.get('starting_points', {}))
+        # # (4-2) starting_points 업데이트: 요청에 'starting_points'가 있으면 덮어씌움
+        # if 'starting_points' in data:
+        #     combined_data['starting_points'] = data['starting_points']
+        # # combined_data['desire'] = float(data.get('desire', old_input_data.get('desire', 0.0)))
+        # # ...
 
-        # 이제 combined_data를 기반으로 다시 모델 로딩, parameter_prediction 실행
-        # (아래 로직은 /api/submit_prediction 에 있는 것을 최대한 재활용)
+        # # 이제 combined_data를 기반으로 다시 모델 로딩, parameter_prediction 실행
+        # # (아래 로직은 /api/submit_prediction 에 있는 것을 최대한 재활용)
+        for key, val in data.items():
+            # starting_points는 아래에서 별도 처리할 것이므로 여기서는 스킵
+            if key == 'starting_points':
+                continue
+            combined_data[key] = val
+
+        # 이제 starting_points에 대해서만 별도 로직 적용
+        if 'starting_points' in data:
+            new_values = data['starting_points']  # ex) [335, 20, 85, ...]
+            old_sp = old_input_data.get('starting_points', {})
+
+            not_erased_keys = [k for k in old_sp.keys() if k not in erase_list]
+
+            # 길이 확인
+            if len(not_erased_keys) != len(new_values):
+                return jsonify({'status': 'error', 'message': '길이 불일치'}), 400
+
+            # 매핑
+            for i, k in enumerate(not_erased_keys):
+                old_sp[k] = new_values[i]
+
+            # 최종 반영
+            combined_data['starting_points'] = old_sp
+
 
         # 1) filename, metadata, CSV 로드
         filename = combined_data['filename']
@@ -1363,7 +1406,7 @@ def rerun_prediction():
         # 4) parameter_prediction 실행에 필요한 인자 셋팅
         #    (원하는 로직에 맞게)
         
-        starting_points = combined_data['starting_points']  # 예: dict 형태
+        starting_points = data['starting_points']  # 예: dict 형태
         desired = int(combined_data['desire'])
         mode = combined_data['option']  # 'local' or 'global'
         modeling = combined_data['modeling_type'].lower()
@@ -1593,6 +1636,7 @@ class EarlyStopping:
             self.best_score = score
             self.counter = 0
             self.train_loss_min = train_loss
+
 def load_constraints_from_metadata(csv_filename):
     """
     csv_filename: 예) "mydata.csv" (확장자 포함)

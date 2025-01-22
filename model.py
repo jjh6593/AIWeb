@@ -158,6 +158,7 @@ class EarlyStopping:
 
 
 def _train_nn(model, X_train, y_train, epochs=100, lr=0.001, batch_size=32):
+    torch.manual_seed(2025)  # 모델 학습 전에 시드 설정
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
