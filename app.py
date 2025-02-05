@@ -1,6 +1,6 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template, make_response
+from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, make_response
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-import os, datetime
+import os, datetime, random, json, shutil, threading
 import random
 from sklearn.preprocessing import MinMaxScaler
 import math
@@ -11,7 +11,8 @@ import json
 from model import create_model, _train_nn
 from data_preprocessing import MinMaxScaling
 import joblib
-
+import firebase_admin
+from firebase_admin import credentials, firestore
 # 전역에서 PyTorch와 관련 모듈 임포트
 import torch
 import torch.nn as nn
@@ -20,10 +21,12 @@ from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 import time
 from sklearn.metrics import mean_squared_error
-
+from functools import wraps
 import logging
 from traking import parameter_prediction
 import shutil
+
+
 
 # 디버깅 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
@@ -35,11 +38,18 @@ random.seed(42)
 
 # NumPy 시드 설정
 np.random.seed(42)
+# Firebase Admin SDK 초기화
+cred = credentials.Certificate("./serviceAccountKey.json")  # JSON 키 파일 경로
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 
 # PyTorch 시드 설정 (CPU 및 GPU)
 torch.manual_seed(42)
 torch.cuda.manual_seed_all(42)  # 모든 GPU에 적용
 app = Flask(__name__)
+app.secret_key = "super_secret_key_123!"  # ✅ 비밀 키 설정 (중요)
+import os
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
 
 # CORS(app)
 # 특정 Origin 허용
@@ -54,6 +64,8 @@ OUTPUTS_FOLDER = 'outputs'
 MODEL_FOLDER = 'models'
 METADATA_FOLDER = 'metadata'  # 메타데이터 저장 폴더
 
+
+
 # Flask 설정에 디렉토리 경로 추가
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUTS_FOLDER'] = OUTPUTS_FOLDER
@@ -63,6 +75,274 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
 os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
 os.makedirs(METADATA_FOLDER, exist_ok=True)
+
+
+# 전역 파일 저장 경로 (기본적으로 모든 사용자가 공유하는 폴더는 최소한 회원정보 관리용으로만 사용)
+USERS_BASE = os.path.join(os.getcwd(), "users")  # 사용자별 폴더는 이 아래에 생성됨
+os.makedirs(USERS_BASE, exist_ok=True)
+
+# 동시성 처리를 위한 글로벌 락
+file_lock = threading.Lock()
+# ----------------- 사용자별 폴더 관련 헬퍼 함수 -----------------
+def get_user_id():
+    user_id = session.get("user_id")
+    if not user_id:
+        raise Exception("로그인이 필요합니다.")
+    return user_id
+
+def get_user_base_folder():
+    """로그인한 사용자의 기본 폴더 (예: users/user001) 반환"""
+    user_id = get_user_id()
+    base_folder = os.path.join(USERS_BASE, user_id)
+    os.makedirs(base_folder, exist_ok=True)
+    return base_folder
+
+def get_user_upload_folder():
+    base = get_user_base_folder()
+    folder = os.path.join(base, "upload")
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+def get_user_model_folder():
+    base = get_user_base_folder()
+    folder = os.path.join(base, "model")
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+def get_user_output_folder():
+    base = get_user_base_folder()
+    folder = os.path.join(base, "output")
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+def get_user_metadata_folder():
+    base = get_user_base_folder()
+    folder = os.path.join(base, "metadata")
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+# ----------------- 로그인 필요 데코레이터 -----------------
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user_id" not in session:
+            return jsonify({'status': 'error', 'message': '로그인이 필요합니다.'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# ----------------- 고유 user_id(숫자) 자동 생성 함수 -----------------
+def generate_user_id():
+    """
+    Firestore의 Counters 컬렉션 내 'user_counter' 문서를 이용하여 고유한 user_id(숫자)를 생성합니다.
+    """
+    counter_ref = db.collection("Counters").document("user_counter")
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def update_counter(transaction, ref):
+        # transaction.get(ref)는 generator 객체를 반환할 수 있으므로 첫 번째 요소를 가져옵니다.
+        snapshot = next(transaction.get(ref), None)
+        if snapshot and snapshot.exists:
+            data = snapshot.to_dict() or {}
+            last_id = data.get("last_id", 0)
+            new_id = last_id + 1
+            transaction.update(ref, {"last_id": new_id})
+        else:
+            new_id = 1
+            transaction.set(ref, {"last_id": new_id})
+        return new_id
+
+    new_number = update_counter(transaction, counter_ref)
+    return new_number  # 숫자형 값 반환
+
+
+
+# ----------------- 회원가입 API -----------------
+@app.route('/api/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    required_fields = ["ID", "PW", "department", "email", "phone", "user_name"]
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"status": "error", "message": f"{field} 필드는 필수입니다."}), 400
+
+    try:
+        account_id = data["ID"]
+
+        # 중복 ID 확인
+        user_ref = db.collection("User").document(account_id)
+        if user_ref.get().exists:
+            return jsonify({"status": "error", "message": "이미 사용 중인 ID입니다."}), 400
+
+        # 고유한 user_id 생성
+        numeric_id = generate_user_id()
+
+        # 사용자 폴더 경로 설정
+        base_path = f"./users/{account_id}"
+        metadata_path_str = f"{base_path}/metadata"
+        model_path_str    = f"{base_path}/model"
+        output_path_str   = f"{base_path}/output"
+        upload_path_str   = f"{base_path}/upload"
+
+        # User 문서에 저장할 데이터
+        user_doc = {
+            "ID": account_id,
+            "PW": data["PW"],
+            "department": data["department"],
+            "email": data["email"],
+            "phone": data["phone"],
+            "user_id": numeric_id,
+            "user_name": data["user_name"],
+            "User_Profile": {               # ⭐ 하위 컬렉션이 아닌 필드로 저장
+                "RANK": 0,
+                "metadata": metadata_path_str,
+                "model": model_path_str,
+                "output": output_path_str,
+                "upload": upload_path_str
+            }
+        }
+
+        # Firestore에 저장
+        user_ref.set(user_doc)
+
+        # 서버에 사용자 폴더 생성
+        os.makedirs(base_path, exist_ok=True)
+        os.makedirs(f"{base_path}/metadata", exist_ok=True)
+        os.makedirs(f"{base_path}/model", exist_ok=True)
+        os.makedirs(f"{base_path}/output", exist_ok=True)
+        os.makedirs(f"{base_path}/upload", exist_ok=True)
+
+        return jsonify({
+            "status": "success",
+            "message": "회원가입 성공",
+            "user": user_doc
+        }), 200
+
+    except Exception as e:
+        logging.error(str(e))
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ----------------- 로그인 API -----------------
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if "ID" not in data or "PW" not in data:
+        return jsonify({"status": "error", "message": "ID와 PW가 필요합니다."}), 400
+    try:
+        user_ref = db.collection("User").document(data["ID"])
+        user_doc = user_ref.get().to_dict()
+        if not user_doc:
+            return jsonify({"status": "error", "message": "사용자가 존재하지 않습니다."}), 404
+        if user_doc["PW"] != data["PW"]:
+            return jsonify({"status": "error", "message": "비밀번호가 틀렸습니다."}), 401
+        session["user_id"] = data["ID"]
+        return jsonify({"status": "success", "message": "로그인 성공", "user": user_doc}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ----------------- 로그아웃 API -----------------
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.pop("user_id", None)
+    return jsonify({"status": "success", "message": "로그아웃 되었습니다."}), 200
+# ----------------- 로그인된 사용자의 정보 불러오기 API -----------------
+@app.route('/api/get_user', methods=['GET'])
+def get_user():
+    if "user_id" not in session:
+        return jsonify({"status": "error", "message": "로그인이 필요합니다."}), 401
+    try:
+        user_id = session["user_id"]
+        user_doc = db.collection("User").document(user_id).get().to_dict()
+        if not user_doc:
+            return jsonify({"status": "error", "message": "사용자를 찾을 수 없습니다."}), 404
+
+        # 비밀번호 제거
+        user_doc.pop("PW", None)
+
+        # User_Profile은 이제 필드이므로 직접 접근
+        profile_data = user_doc.get("User_Profile", {})
+
+        return jsonify({"status": "success", "user": user_doc, "profile": profile_data}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    
+# ----------------- 회원정보 수정 API (PW만 수정 가능) -----------------
+@app.route('/api/update_password', methods=['POST'])
+def update_password():
+    if "user_id" not in session:
+        return jsonify({"status": "error", "message": "로그인이 필요합니다."}), 401
+    data = request.get_json()
+    if "old_password" not in data or "new_password" not in data:
+        return jsonify({"status": "error", "message": "old_password와 new_password가 필요합니다."}), 400
+    try:
+        user_id = session["user_id"]
+        user_ref = db.collection("User").document(user_id)
+        user_doc = user_ref.get().to_dict()
+        if not user_doc:
+            return jsonify({"status": "error", "message": "사용자를 찾을 수 없습니다."}), 404
+        if user_doc["PW"] != data["old_password"]:
+            return jsonify({"status": "error", "message": "기존 비밀번호가 일치하지 않습니다."}), 401
+        user_ref.update({"PW": data["new_password"]})
+        return jsonify({"status": "success", "message": "비밀번호 수정 완료"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+# ----------------- 회원탈퇴 API -----------------
+@app.route('/api/delete_account', methods=['POST'])
+def delete_account():
+    if "user_id" not in session:
+        return jsonify({"status": "error", "message": "로그인이 필요합니다."}), 401
+    try:
+        user_id = session["user_id"]
+        db.collection("User").document(user_id).delete()
+        # 하위 컬렉션도 삭제해야 하는 경우 Firestore에서는 일괄 삭제 로직이 필요합니다.
+        # 여기서는 간단하게 User_Profile 문서 삭제
+        db.collection("User").document(user_id).collection("User_Profile").document("profile").delete()
+        # 서버 파일 시스템 상의 사용자 폴더 삭제 (users 폴더 하위)
+        user_folder = f"./users/{user_id}"
+        if os.path.exists(user_folder):
+            shutil.rmtree(user_folder)
+        session.pop("user_id", None)
+        return jsonify({"status": "success", "message": "회원탈퇴 완료"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ----------------- 관리자용: 전체 사용자 정보 확인 API -----------------
+@app.route('/api/admin/get_all_users', methods=['GET'])
+def admin_get_all_users():
+    try:
+        users = []
+        for doc in db.collection("User").stream():
+            user_data = doc.to_dict()
+            user_data.pop("PW", None)
+            profile_data = db.collection("User").document(doc.id).collection("User_Profile").document("profile").get().to_dict()
+            users.append({"user": user_data, "profile": profile_data})
+        return jsonify({"status": "success", "users": users}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ----------------- 관리자용: 사용자 Rank 수정 API -----------------
+@app.route('/api/admin/update_rank', methods=['POST'])
+def admin_update_rank():
+    """
+    요청 JSON 예시:
+    {
+      "user_id": "user001",
+      "RANK": 2
+    }
+    관리자가 UserProfiles 컬렉션에서 해당 사용자의 RANK 값을 수정합니다.
+    실제 운영에서는 관리자 인증을 반드시 추가해야 합니다.
+    """
+    data = request.get_json()
+    if "user_id" not in data or "RANK" not in data:
+        return jsonify({"status": "error", "message": "user_id와 RANK가 필요합니다."}), 400
+    try:
+        db.collection("User").document(data["user_id"]).collection("User_Profile").document("profile").update({"RANK": data["RANK"]})
+        return jsonify({"status": "success", "message": "Rank 수정 완료"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # 라우트 설정
 
