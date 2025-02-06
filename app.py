@@ -52,31 +52,21 @@ app.secret_key = "super_secret_key_123!"  # ✅ 비밀 키 설정 (중요)
 import os
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
 
+# 🔥 여기에 세션 쿠키 관련 설정을 추가 🔥
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",  # 크로스 오리진에서 쿠키 허용
+    SESSION_COOKIE_SECURE=True,      # 개발 환경에서는 False, 실제 배포(HTTPS) 시에는 True로 변경
+    SESSION_COOKIE_DOMAIN=None,  # 도메인 설정 추가
+    SESSION_COOKIE_PATH='/'      # 경로 설정 추가
+)
+
 # CORS(app)
 # 특정 Origin 허용
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5173/", "http://127.0.0.1:5173/"]}})
+CORS(app, supports_credentials=True,resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5173/", "http://127.0.0.1:5173/"]}})
 
 # 업로드 및 모델 저장 디렉토리 설정
 mimetypes.init()
 mimetypes.add_type('application/javascript', '.js', strict=True)
-
-# UPLOAD_FOLDER = 'uploads'
-# OUTPUTS_FOLDER = 'outputs'
-# MODEL_FOLDER = 'models'
-# METADATA_FOLDER = 'metadata'  # 메타데이터 저장 폴더
-
-
-
-# # Flask 설정에 디렉토리 경로 추가
-# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-# app.config['OUTPUTS_FOLDER'] = OUTPUTS_FOLDER
-# app.config['MODEL_FOLDER'] = MODEL_FOLDER
-# # 폴더 생성
-# os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-# os.makedirs(MODEL_FOLDER, exist_ok=True)
-# os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
-# os.makedirs(METADATA_FOLDER, exist_ok=True)
-
 
 # 전역 파일 저장 경로 (기본적으로 모든 사용자가 공유하는 폴더는 최소한 회원정보 관리용으로만 사용)
 USERS_BASE = os.path.join(os.getcwd(), "users")  # 사용자별 폴더는 이 아래에 생성됨
@@ -238,19 +228,33 @@ def login():
             return jsonify({"status": "error", "message": "사용자가 존재하지 않습니다."}), 404
         if user_doc["PW"] != data["PW"]:
             return jsonify({"status": "error", "message": "비밀번호가 틀렸습니다."}), 401
+        session.permanent = True
         session["user_id"] = data["ID"]
-        return jsonify({"status": "success", "message": "로그인 성공", "user": user_doc}), 200
+        response = jsonify({"status": "success", "message": "로그인 성공", "user": user_doc})
+
+        response.set_cookie('session', session.get('user_id'), 
+                       secure=True, 
+                       samesite=None, 
+                       httponly=True)
+        print("Current session:", session)  # 세션 상태 로깅
+        print("Cookies:", request.cookies)  # 쿠키 상태 로깅
+
+        return response, 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ----------------- 로그아웃 API -----------------
 @app.route('/api/logout', methods=['POST'])
+@login_required
 def logout():
     session.pop("user_id", None)
     return jsonify({"status": "success", "message": "로그아웃 되었습니다."}), 200
 # ----------------- 로그인된 사용자의 정보 불러오기 API -----------------
 @app.route('/api/get_user', methods=['GET'])
+@login_required
 def get_user():
+    print("Current session:", session)  # 세션 상태 로깅
+    print("Cookies:", request.cookies)  # 쿠키 상태 로깅
     if "user_id" not in session:
         return jsonify({"status": "error", "message": "로그인이 필요합니다."}), 401
     try:
@@ -264,7 +268,7 @@ def get_user():
 
         # User_Profile은 이제 필드이므로 직접 접근
         profile_data = user_doc.get("User_Profile", {})
-
+        
         return jsonify({"status": "success", "user": user_doc, "profile": profile_data}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -292,6 +296,7 @@ def update_password():
         return jsonify({"status": "error", "message": str(e)}), 500
 # ----------------- 회원탈퇴 API -----------------
 @app.route('/api/delete_account', methods=['POST'])
+@login_required
 def delete_account():
     if "user_id" not in session:
         return jsonify({"status": "error", "message": "로그인이 필요합니다."}), 401
@@ -312,6 +317,7 @@ def delete_account():
 
 # ----------------- 관리자용: 전체 사용자 정보 확인 API -----------------
 @app.route('/api/admin/get_all_users', methods=['GET'])
+@login_required
 def admin_get_all_users():
     try:
         users = []
@@ -363,6 +369,7 @@ def handle_options_request():
         response.headers.add("Access-Control-Allow-Origin", request.headers.get("Origin"))
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        response.headers.add("Access-Control-Allow-Credentials", "true")  # 추가
         response.headers.add("Access-Control-Max-Age", "3600")
         return response
 
@@ -603,7 +610,7 @@ def save_model():
 
     '''-----------------------------제약 조건에 따라서 모델 생성 ------------------------------'''
     # (2) 메타데이터 로드 & constraints 생성
-    metadata_path = os.path.join(get_user_metadata_folder, f"{csv_filename}_metadata.json")
+    metadata_path = os.path.join(get_user_metadata_folder(), f"{csv_filename}_metadata.json")
     with open(metadata_path, 'r', encoding='utf-8') as f:
         metadata_list = json.load(f)
 
