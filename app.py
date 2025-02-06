@@ -1,6 +1,11 @@
-from flask import Flask, request, jsonify, send_from_directory, session, redirect, url_for, make_response
+import firebase_admin
+from firebase_admin import credentials, firestore, auth as firebase_auth
+from flask import Flask, request, jsonify, send_from_directory, make_response,session
+from functools import wraps
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 import os, datetime, random, json, shutil, threading
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
 import random
 from sklearn.preprocessing import MinMaxScaler
 import math
@@ -11,16 +16,12 @@ import json
 from model import create_model, _train_nn
 from data_preprocessing import MinMaxScaling
 import joblib
-import firebase_admin
-from firebase_admin import credentials, firestore
 # 전역에서 PyTorch와 관련 모듈 임포트
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
-from sklearn.model_selection import train_test_split
 import time
-from sklearn.metrics import mean_squared_error
 from functools import wraps
 import logging
 from traking import parameter_prediction
@@ -59,22 +60,22 @@ CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.
 mimetypes.init()
 mimetypes.add_type('application/javascript', '.js', strict=True)
 
-UPLOAD_FOLDER = 'uploads'
-OUTPUTS_FOLDER = 'outputs'
-MODEL_FOLDER = 'models'
-METADATA_FOLDER = 'metadata'  # 메타데이터 저장 폴더
+# UPLOAD_FOLDER = 'uploads'
+# OUTPUTS_FOLDER = 'outputs'
+# MODEL_FOLDER = 'models'
+# METADATA_FOLDER = 'metadata'  # 메타데이터 저장 폴더
 
 
 
-# Flask 설정에 디렉토리 경로 추가
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['OUTPUTS_FOLDER'] = OUTPUTS_FOLDER
-app.config['MODEL_FOLDER'] = MODEL_FOLDER
-# 폴더 생성
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(MODEL_FOLDER, exist_ok=True)
-os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
-os.makedirs(METADATA_FOLDER, exist_ok=True)
+# # Flask 설정에 디렉토리 경로 추가
+# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+# app.config['OUTPUTS_FOLDER'] = OUTPUTS_FOLDER
+# app.config['MODEL_FOLDER'] = MODEL_FOLDER
+# # 폴더 생성
+# os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# os.makedirs(MODEL_FOLDER, exist_ok=True)
+# os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
+# os.makedirs(METADATA_FOLDER, exist_ok=True)
 
 
 # 전역 파일 저장 경로 (기본적으로 모든 사용자가 공유하는 폴더는 최소한 회원정보 관리용으로만 사용)
@@ -367,6 +368,7 @@ def handle_options_request():
 
 # 0 CSV 파일 및 메타데이터 삭제
 @app.route('/api/delete_csv', methods=['POST'])
+@login_required
 def delete_csv():
     """
     업로드된 CSV 파일과 해당 메타데이터를 삭제하는 API 엔드포인트.
@@ -387,8 +389,8 @@ def delete_csv():
         return jsonify({'status': 'error', 'message': 'filename 파라미터가 필요합니다.'}), 400
 
     # CSV 파일 및 메타데이터 경로 지정
-    csv_path = os.path.join(UPLOAD_FOLDER, filename)
-    metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
+    csv_path = os.path.join(get_user_upload_folder(), filename)
+    metadata_path = os.path.join(get_user_metadata_folder(), f"{filename}_metadata.json")
 
     try:
         # CSV 파일 삭제
@@ -407,6 +409,7 @@ def delete_csv():
     
 # 1 CSV 파일 업로드
 @app.route('/api/upload_csv', methods=['POST'])
+@login_required
 def upload_csv():
     if 'file' not in request.files:
         return jsonify({'status': 'error', 'message': '파일이 없습니다.'}), 400
@@ -414,24 +417,25 @@ def upload_csv():
     if file.filename == '':
         return jsonify({'status': 'error', 'message': '파일이 선택되지 않았습니다.'}), 400
     filename = file.filename
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file_path = os.path.join(get_user_upload_folder(), filename)
     file.save(file_path)
     return jsonify({'status': 'success', 'message': '파일 업로드 성공', 'filename': filename})
 
+
 # 2 업로드된 CSV 파일 목록 가져오기
 @app.route('/api/get_csv_files', methods=['GET'])
+@login_required
 def get_csv_files():
-    files = os.listdir(UPLOAD_FOLDER)
+    files = os.listdir(get_user_upload_folder())
     return jsonify({'status': 'success', 'files': files})
 
-# -------------------------
-# 새롭게 추가된 메타데이터 저장(생성/수정) API
-# -------------------------
+
 @app.route('/api/save_csv_metadata', methods=['POST'])
+@login_required
 def save_csv_metadata():
     """
     메타데이터를 새로 생성하거나, 기존 메타데이터를 갱신(덮어쓰기)하기 위한 엔드포인트.
-    - 요청 예:
+    요청 예:
         {
           "filename": "example.csv",
           "metadata": [
@@ -439,21 +443,25 @@ def save_csv_metadata():
               "column": "Temperature",
               "unit": "C",
               "min": 0,
-              "max": 100
+              "max": 100,
+              "data_type": "float",
+              "round": 2
             },
             {
               "column": "Pressure",
               "unit": "bar",
               "min": 1,
-              "max": 50
+              "max": 50,
+              "data_type": "float",
+              "round": 2
             }
           ]
         }
-    - 응답 예:
+    응답 예:
         {
           "status": "success",
           "message": "Metadata saved/updated successfully.",
-          "saved_metadata": [...]  // 저장된 메타데이터 그대로
+          "saved_metadata": [...]
         }
     """
     data = request.json
@@ -467,25 +475,22 @@ def save_csv_metadata():
     if not metadata:
         return jsonify({'status': 'error', 'message': 'metadata가 비어 있습니다.'}), 400
 
-    # 실제 CSV가 존재하는지 체크 (선택적으로)
-    csv_path = os.path.join(UPLOAD_FOLDER, filename)
+    # 실제 CSV 파일이 사용자 업로드 폴더에 존재하는지 체크 (선택적으로)
+    csv_path = os.path.join(get_user_upload_folder(), filename)
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
-    # (1) unit, min, max를 float으로 변환
-    
+
+    # unit, min, max 등을 float, int로 변환
     for item in metadata:
-        # get()에서 디폴트값 0.0 (또는 None)으로 지정해도 됨
         item['unit'] = float(item.get('unit', 0.0))
         item['min'] = float(item.get('min', 0.0))
         item['max'] = float(item.get('max', 0.0))
-        item['round'] = int(item.get('round',0))
-        # data_type 문자열을 실제 Python 타입으로 변환
+        item['round'] = int(item.get('round', 0))
         data_type_str = item.get('data_type', 'float').lower()
-        # 그냥 문자열 그대로 저장하기
         item['data_type'] = data_type_str
-        
-    # 메타데이터를 저장할 경로
-    metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
+
+    # 메타데이터 저장 경로: 로그인한 사용자의 메타데이터 폴더를 사용
+    metadata_path = os.path.join(get_user_metadata_folder(), f"{filename}_metadata.json")
     try:
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
@@ -500,11 +505,12 @@ def save_csv_metadata():
 
 # 3 CSV 파일 내용 가져오기
 @app.route('/api/get_csv_data', methods=['GET'])
+@login_required
 def get_csv_data():
     filename = request.args.get('filename')
     if not filename:
         return jsonify({'status': 'error', 'message': '파일명이 제공되지 않았습니다.'}), 400
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file_path = os.path.join(get_user_upload_folder(), filename)
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': '파일을 찾을 수 없습니다.'}), 404
     df = pd.read_csv(file_path)
@@ -512,8 +518,10 @@ def get_csv_data():
     columns = df.columns.tolist()
     return jsonify({'status': 'success', 'data_preview': data_preview, 'columns': columns})
 
+
 # 4. 필터링된 CSV 저장
 @app.route('/api/save_filtered_csv', methods=['POST'])
+@login_required
 def save_filtered_csv():
     data = request.json
     print(f"Received data: {data}")  # 디버깅용
@@ -527,7 +535,7 @@ def save_filtered_csv():
     if not filename:
         return jsonify({'status': 'error', 'message': '원본 파일명이 필요합니다.'}), 400
 
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)  # current_app 대신 app 사용
+    file_path = os.path.join(get_user_upload_folder, filename)  # current_app 대신 app 사용
     print(f"File path: {file_path}")  # 디버깅용
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': '원본 파일을 찾을 수 없습니다.'}), 404
@@ -535,31 +543,15 @@ def save_filtered_csv():
     # CSV 파일에서 제외된 컬럼을 제거하고 저장
     df = pd.read_csv(file_path)
     filtered_df = df.drop(columns=exclude_columns, errors='ignore')
-    new_file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+    new_file_path = os.path.join(get_user_upload_folder, new_filename)
     print(f"Saved filtered file to: {new_file_path}")
     filtered_df.to_csv(new_file_path, index=False)
 
     return jsonify({'status': 'success', 'message': f'필터링된 데이터가 {new_filename}로 저장되었습니다.'})
 
-# # 5. 데이터 설정 제출
-# @app.route('/api/submit_data_settings', methods=['POST'])
-# def submit_data_settings():
-#     filename = request.form.get('filename')
-#     target_column = request.form.get('targetColumn')
-#     scaler = request.form.get('scaler')
-#     missing_handling = request.form.get('missingHandling')
-
-#     if not filename or not target_column:
-#         return jsonify({'status': 'error', 'message': '필수 정보가 제공되지 않았습니다.'}), 400
-
-#     file_path = os.path.join(UPLOAD_FOLDER, filename)
-#     df = pd.read_csv(file_path)
-
-
-#     return jsonify({'status': 'success', 'message': '데이터 설정이 완료되었습니다.'})
-
 # # 6. 모델 생성
 @app.route('/api/save_model', methods=['POST'])
+@login_required
 def save_model():
     
     data = request.json
@@ -578,7 +570,8 @@ def save_model():
     hyperparams = data.get('hyperparameters', {})
     target_column = "Target"
     epochs = hyperparams.get('epoch', 100) # 디폴트 0.001
-    save_dir = os.path.join(MODEL_FOLDER, model_name)
+    user_model_folder = get_user_model_folder()
+    save_dir = os.path.join(user_model_folder, model_name)
     os.makedirs(save_dir, exist_ok=True)
 
     val_ratio = float(data.get('val_ratio', 0.2))
@@ -593,7 +586,7 @@ def save_model():
         return jsonify({'status': 'error', 'message': '필요한 정보가 부족합니다.'}), 400
     
     # CSV 파일 로드
-    csv_path = os.path.join(UPLOAD_FOLDER, csv_filename)
+    csv_path = os.path.join(get_user_upload_folder(), csv_filename)
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': f"CSV 파일 '{csv_filename}'을 찾을 수 없습니다."}), 404
 
@@ -610,7 +603,7 @@ def save_model():
 
     '''-----------------------------제약 조건에 따라서 모델 생성 ------------------------------'''
     # (2) 메타데이터 로드 & constraints 생성
-    metadata_path = os.path.join(METADATA_FOLDER, f"{csv_filename}_metadata.json")
+    metadata_path = os.path.join(get_user_metadata_folder, f"{csv_filename}_metadata.json")
     with open(metadata_path, 'r', encoding='utf-8') as f:
         metadata_list = json.load(f)
 
@@ -902,8 +895,10 @@ def delete_model():
         return jsonify({'status': 'error', 'message': f'모델 삭제 중 오류가 발생했습니다: {str(e)}'}), 500
     
 @app.route('/api/get_models', methods=['GET'])
+@login_required
 def get_models():
     models = []
+    MODEL_FOLDER = get_user_model_folder()
     if not os.path.exists(MODEL_FOLDER):
         os.makedirs(MODEL_FOLDER, exist_ok=True)
 
@@ -948,7 +943,9 @@ def get_models():
 '''---------------------------------------------모델학습----------------------------------------------'''
 # 모델 업로드 API
 @app.route('/api/upload_model', methods=['POST'])
+@login_required
 def upload_model():
+    MODEL_FOLDER = get_user_model_folder()
     if 'model_file' not in request.files or 'model_name' not in request.form:
         return jsonify({'status': 'error', 'message': '모델 파일과 이름이 필요합니다.'}), 400
 
@@ -980,7 +977,7 @@ def upload_model():
     return jsonify({'status': 'success', 'message': f'모델 {model_name}이(가) 업로드되었습니다.'})
 def debug_training_results():
     results = []
-
+    OUTPUTS_FOLDER = get_user_output_folder()
     if not os.path.exists(OUTPUTS_FOLDER):
         print(f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다.")
         return {'status': 'error', 'message': f"'{OUTPUTS_FOLDER}' 폴더가 존재하지 않습니다."}
@@ -1048,7 +1045,7 @@ def process_models(models_input):
 
     # 매핑된 모델 리스트 초기화
     mapped_models = []
-
+    MODEL_FOLDER = get_user_model_folder()
     # 모델 처리 시작
     for model_name in models_input:
         # 모델 저장 경로 설정
@@ -1096,6 +1093,7 @@ def handle_exception(e):
     return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/submit_prediction', methods=['POST'])
+@login_required
 def submit_prediction():
     try:
         # 요청에서 JSON 데이터 가져오기
@@ -1112,13 +1110,13 @@ def submit_prediction():
             if field not in data:
                 logging.error(f"Missing field: {field}")
                 return jsonify({'status': 'error', 'message': f'필수 필드가 누락되었습니다: {field}'}), 400
-
+        uploads = get_user_upload_folder()
         # filename으로 CSV 및 메타데이터를 찾음
-        data_file_path = os.path.join('uploads', data['filename'])
+        data_file_path = os.path.join(uploads, data['filename'])
         if not os.path.exists(data_file_path):
             logging.error(f"Data file not found: {data['filename']}")
             return jsonify({'status': 'error', 'message': f'Data file not found: {data["filename"]}'}), 400
-
+        METADATA_FOLDER = get_user_metadata_folder()
         # (1) **메타데이터 로드**: filename 기반
         metadata_path = os.path.join(METADATA_FOLDER, f"{data['filename']}_metadata.json")
         if not os.path.exists(metadata_path):
@@ -1163,7 +1161,7 @@ def submit_prediction():
             return jsonify({'status': 'error', 'message': 'desire 값은 실수여야 합니다.'}), 400
 
         # 데이터 파일 로드
-        data_file_path = os.path.join('uploads', data['filename'])
+        data_file_path = os.path.join(uploads, data['filename'])
         if not os.path.exists(data_file_path):
             logging.error(f"Data file not found: {data['filename']}")
             return jsonify({'status': 'error', 'message': f'Data file not found: {data["filename"]}'}), 400
@@ -1277,7 +1275,7 @@ def submit_prediction():
         # ============================
         # 여기서부터 모델 생성/파라미터 로드 로직
         # ============================
-        MODEL_FOLDER = 'models'
+        MODEL_FOLDER = get_user_model_folder()
         models_list = []
 
         for model_name in data['models']:
@@ -1341,17 +1339,10 @@ def submit_prediction():
                 continue
 
         print("모델 생성/로딩 완료:")
-        # for idx, m in enumerate(models_list):
-        #     print(f"{idx+1}. {m}")
 
         # 파일 이름 생성
-        print(data['save_name'])
         save_name = data['save_name']
-        outputs_dir = 'outputs'
-        os.makedirs(outputs_dir, exist_ok=True)
-        # 파일 이름 및 경로 설정
-        save_name = data['save_name']
-        outputs_dir = 'outputs'
+        outputs_dir = get_user_output_folder()
         os.makedirs(outputs_dir, exist_ok=True)
 
         # 서브 폴더 설정
@@ -1453,6 +1444,7 @@ def submit_prediction():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 '''---------------------------------------------Local 재탐색----------------------------------------------'''
 @app.route('/api/rerun_prediction', methods=['POST'])
+@login_required
 def rerun_prediction():
     """
     이미 존재하는 results 폴더(=outputs/폴더명)와 
@@ -1815,9 +1807,10 @@ def rerun_prediction():
 '''---------------------------------------------학습 결과----------------------------------------------'''
 # 학습 결과 가져오기
 @app.route('/api/get_training_results', methods=['GET'])
+@login_required
 def get_training_results():
     results = []
-
+    OUTPUTS_FOLDER = get_user_output_folder()
     if not os.path.exists(OUTPUTS_FOLDER):
         os.makedirs(OUTPUTS_FOLDER, exist_ok=True)
 
@@ -1864,6 +1857,7 @@ def get_training_results():
 
 # 결과 삭제 엔드포인트
 @app.route('/api/delete_result', methods=['POST'])
+@login_required
 def delete_result():
     data = request.get_json()
     filename = data.get('filename')
@@ -1871,7 +1865,7 @@ def delete_result():
     if not filename:
         return jsonify({'status': 'error', 'message': 'Filename is required.'}), 400
 
-    outputs_dir = 'outputs'
+    outputs_dir = get_user_output_folder()
     folder_path = os.path.join(outputs_dir, filename)
     print(filename)
     try:
@@ -1917,6 +1911,7 @@ class EarlyStopping:
             self.counter = 0
             self.train_loss_min = train_loss
 
+@login_required
 def load_constraints_from_metadata(csv_filename):
     """
     csv_filename: 예) "mydata.csv" (확장자 포함)
@@ -1938,7 +1933,7 @@ def load_constraints_from_metadata(csv_filename):
       }
     ]
     """
-
+    METADATA_FOLDER = get_user_metadata_folder()
     # 메타데이터 파일 경로
     metadata_path = os.path.join(METADATA_FOLDER, f"{csv_filename}_metadata.json")
 
@@ -1979,6 +1974,7 @@ def load_constraints_from_metadata(csv_filename):
 # 저장된 메타데이터 파일 목록 조회 API
 # -------------------------
 @app.route('/api/list_csv_metadata', methods=['GET'])
+@login_required
 def list_csv_metadata():
     """
     저장된 메타데이터 파일 목록을 조회하기 위한 엔드포인트.
@@ -1993,6 +1989,7 @@ def list_csv_metadata():
           ]
         }
     """
+    METADATA_FOLDER = get_user_metadata_folder()
     try:
         metadata_files = [
             f for f in os.listdir(METADATA_FOLDER) if f.endswith('_metadata.json')
