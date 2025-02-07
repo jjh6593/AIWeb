@@ -34,19 +34,20 @@ logging.basicConfig(level=logging.DEBUG)
 # CORS 설정을 위해 필요하다면 다음 코드를 추가하세요.
 from flask_cors import CORS
 import numpy as np
-# Python 기본 random 모듈 시드 설정
-random.seed(42)
 
-# NumPy 시드 설정
-np.random.seed(42)
+
 # Firebase Admin SDK 초기화
 cred = credentials.Certificate("./serviceAccountKey.json")  # JSON 키 파일 경로
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# Python 기본 random 모듈 시드 설정
+random.seed(2025)
+# NumPy 시드 설정
+np.random.seed(2025)
 # PyTorch 시드 설정 (CPU 및 GPU)
-torch.manual_seed(42)
-torch.cuda.manual_seed_all(42)  # 모든 GPU에 적용
+torch.manual_seed(2025)
+torch.cuda.manual_seed_all(2025)  # 모든 GPU에 적용
 app = Flask(__name__)
 app.secret_key = "super_secret_key_123!"  # ✅ 비밀 키 설정 (중요)
 import os
@@ -62,7 +63,9 @@ app.config.update(
 
 # CORS(app)
 # 특정 Origin 허용
-CORS(app, supports_credentials=True,resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5173/", "http://127.0.0.1:5173/"]}})
+# CORS(app, supports_credentials=True,resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5173/", "http://127.0.0.1:5173/"]}})
+# origins 옵션에 정확한 도메인만 명시
+CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
 
 # 업로드 및 모델 저장 디렉토리 설정
 mimetypes.init()
@@ -276,6 +279,7 @@ def get_user():
     
 # ----------------- 회원정보 수정 API (PW만 수정 가능) -----------------
 @app.route('/api/update_password', methods=['POST'])
+@login_required
 def update_password():
     if "user_id" not in session:
         return jsonify({"status": "error", "message": "로그인이 필요합니다."}), 401
@@ -614,7 +618,6 @@ def save_model():
     with open(metadata_path, 'r', encoding='utf-8') as f:
         metadata_list = json.load(f)
 
-
     # -----------------------------------------------------------------------------
     # ### (A) 각 열의 min == max인 경우, 해당 열을 erase_cols에 추가 후 학습에서 제외
     # -----------------------------------------------------------------------------
@@ -686,8 +689,9 @@ def save_model():
     # ---------------------------
     df = df.fillna(0)
     X_df = df.drop(columns=[target_column])
+    print(X_df[:5])
     y_df = df[[target_column]]  # 2D
-    print(X_df.shape)
+    
     scaler_X = MinMaxScaling(data=X_df, constraints=constraints)  # dtype = torch.float32(기본값)
     X_scaled = scaler_X.data.detach().numpy()  # (N, D) numpy
     scaler_y = MinMaxScaler()  
@@ -696,7 +700,7 @@ def save_model():
      # ---------------------------
     # (4) 데이터 분할
     # ---------------------------
-    X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_scaled, test_size=val_ratio, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_scaled, test_size=val_ratio, random_state=2025)
 
     # feature, target을 np.array 또는 torch.tensor 형태로 변환 (기존 로직 그대로)
     X_train_np = X_train
@@ -860,7 +864,7 @@ def save_model():
 def delete_model():
     data = request.json
     model_name = data.get('model_name')
-
+    MODEL_FOLDER = get_user_model_folder()
     if not model_name:
         return jsonify({'status': 'error', 'message': '모델 이름이 필요합니다.'}), 400
 
@@ -1106,7 +1110,6 @@ def submit_prediction():
         # 요청에서 JSON 데이터 가져오기
         data = request.get_json()
         
-
         # 터미널에 받은 데이터 출력
         logging.debug("Received data:")
         logging.debug(json.dumps(data, indent=4, ensure_ascii=False))
@@ -1209,7 +1212,7 @@ def submit_prediction():
         if isinstance(escape, str):
             escape = escape.lower() == 'true'
         if isinstance(up, str):
-            up = escape.lower() == 'true'
+            up = up.lower() == 'true'
         alternative = data.get('alternative', 'keep_move')
         # ============================
         # 기존 제약조건 가져오기
@@ -1276,6 +1279,7 @@ def submit_prediction():
         
         starting_point = list(data['starting_points'].values())
         print(starting_point)
+        
         # starting_point = [150, 25, 40, 1, 120, 250, 10, 25, 25, 900, 0.25, 2, 100, 1800, 2000]
         starting_point = filter_by_indices(starting_point, erase_indices)
 
@@ -1369,15 +1373,6 @@ def submit_prediction():
         upper_bound = df.max().tolist()  # 각 컬럼의 최대값
         lower_bound = df.min().tolist()  # 각 컬럼의 최소값
         
-        # desired = int(desired)
-        # desired = 550
-        # mode = 'global'
-        # modeling = 'ensemble'
-        # strategy = 'stochastic'
-        # tolerance = 1
-        # beam_width = 5
-        # num_candidates = 5
-        
         if strategy == "best one":
             strategy = "best_one"
         print(f'strategy : {strategy}')
@@ -1387,10 +1382,7 @@ def submit_prediction():
         print(f'beam_width : {beam_width}')
         print(f'num_candidates : {num_candidates}')
         print(f'escape : {escape}')
-        # top_k = 2
-        # index = 0
-        # up = True
-        # alternative = 'keep_move'
+        
         pred_all = None  # 미리 선언
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
@@ -1461,9 +1453,9 @@ def rerun_prediction():
         data = request.get_json()
         if 'save_name' not in data:
             return jsonify({'status': 'error', 'message': 'save_name이 누락되었습니다.'}), 400
-
+        print(data)
         save_name = data['save_name']
-        outputs_dir = 'outputs'
+        outputs_dir = get_user_output_folder()
         subfolder_path = os.path.join(outputs_dir, save_name)
 
         # 기존 폴더 존재 여부 확인
@@ -1502,11 +1494,6 @@ def rerun_prediction():
         # 우선순위: 새 data 값 > old_input_data 값
         # (기본적으로 old_input_data를 복사한 뒤, 새 data에 있는 키는 덮어쓴다)
         combined_data = old_input_data.copy()
-        
-        for key, val in data.items():
-            if key == 'starting_points':
-                continue
-            combined_data[key] = val
         
         # # 예: "starting_points"를 새로 받았으면 덮어씌우기
         # #     만약 "desire", "strategy" 등도 바꾸고 싶다면 동일한 방법으로 진행
@@ -1551,7 +1538,7 @@ def rerun_prediction():
             return jsonify({'status': 'error', 'message': f'Data file not found: {filename}'}), 400
 
         df = pd.read_csv(data_file_path).drop_duplicates()
-        
+        METADATA_FOLDER = get_user_metadata_folder()
         # 2) 메타데이터 로드
         metadata_path = os.path.join(METADATA_FOLDER, f"{filename}_metadata.json")
         if not os.path.exists(metadata_path):
@@ -1567,6 +1554,7 @@ def rerun_prediction():
         upper_bound = [item['max'] for item in stored_metadata]
         round_values = [item['round'] for item in stored_metadata]
         data_type = [item['data_type'] for item in stored_metadata]
+        
         # (원하는 대로 min_boundary, max_boundary, unit 등 로드)
         # 5-4) erase_cols 처리 (변동없는 열 제거)
         erase_cols = []
@@ -1620,7 +1608,7 @@ def rerun_prediction():
         model_names = combined_data['models']  # 기존 input.json 안 models
         print(model_names)
         models_list = []
-        MODEL_FOLDER = 'models'
+        MODEL_FOLDER = get_user_model_folder()
         # 3) 모델 로딩 로직
         for model_name in model_names:
             model_dir = os.path.join(MODEL_FOLDER, model_name)
@@ -1699,6 +1687,7 @@ def rerun_prediction():
             escape = escape.lower() == 'true'
         top_k = combined_data.get('top_k', 2)
         index = combined_data.get('index', 0)
+        print(f'index : index {index}')
         up = combined_data.get('up', True)
         alternative = combined_data.get('alternative', 'keep_move')
         # 5-10) df.max()/min() 이용해서 boundary 업데이트 (submit_prediction과 동일)
@@ -1714,7 +1703,7 @@ def rerun_prediction():
         converted_values = {}
         params = ['tolerance', 'beam_width', 'num_candidates', 'top_k', 'index']
         for param in params:
-            value = data.get(param, None)
+            value = combined_data.get(param, None)
             try:
                 converted_values[param] = int(value) if value is not None else None
             except ValueError:
