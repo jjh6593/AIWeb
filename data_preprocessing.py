@@ -30,14 +30,14 @@ class MinMaxScaling:
             col_data = data[:, i]
             max_ = col_data.max()
             min_ = col_data.min()
-            if max_ == min_:
-                max_ *= epsilon
+            # if max_ == min_:
+            #     max_ *= epsilon
 
             self.max.append(max_)
             self.min.append(min_)
             self.range.append(max_ - min_)
 
-            scaled_col = (col_data) / (max_ - min_)
+            scaled_col = (col_data-min_)/ (max_ - min_)
             self.data = pd.concat([self.data, pd.DataFrame(scaled_col)], axis=1)
 
         # 최종적으로 torch.tensor에 저장

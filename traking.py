@@ -118,7 +118,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 self.range.append(max_ - min_)
 
                 # Normalize the column and add to the DataFrame
-                normalized_column = data[:, i] / (max_ - min_)
+                normalized_column = (data[:, i]-min_) / (max_ - min_)
                 self.data = pd.concat([self.data, pd.DataFrame(normalized_column)], axis=1)
 
             # Convert normalized data to a torch tensor
@@ -135,14 +135,28 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 list: Denormalized data.
             """
             # Convert torch tensor to numpy array if necessary
+            # data = data.detach().numpy() if isinstance(data, torch.Tensor) else data
+
+            # new_data = []
+            # for i, element in enumerate(data):
+            #     element = element * (self.max[i] - self.min[i])
+            #     element = round(element, np.array(list(constraints.values()))[:, 4][i])
+            #     new_data.append(element)
+            # torch.Tensor인 경우 numpy 배열로 변환
             data = data.detach().numpy() if isinstance(data, torch.Tensor) else data
 
             new_data = []
-            for i, element in enumerate(data):
-                element = element * (self.max[i] - self.min[i])
-                element = round(element, np.array(list(constraints.values()))[:, 4][i])
-                new_data.append(element)
+            # constraints의 소수점 자리수를 미리 추출 (정수형으로 변환)
+            precisions = [int(v[4]) for v in list(constraints.values())]
 
+            for i, element in enumerate(data):
+                # element가 numpy 배열인 경우 스칼라 값으로 변환
+                scalar_val = float(element)
+                # 원래 스케일로 복원
+                scalar_val = (scalar_val + self.min[i]) * (self.max[i] - self.min[i])
+                # 반올림: precisions[i]는 정수여야 함
+                scalar_val = round(scalar_val, precisions[i])
+                new_data.append(scalar_val)
             return new_data
 
 
@@ -242,7 +256,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 variables = [[0, 1]] * input_size
             self.all_combinations = list(product(*variables))
             self.adj = []
-
+            print(torch.tensor(self.starting_point, dtype = dtype))
             if alternative == 'keep_move' or alternative == 'keep_up_down':
                 prediction_km, gradient_km, p_all = super().predict(self.models,torch.tensor(self.starting_point, dtype = dtype), 
                                                self.y_prime, self.modeling, fake_gradient = True)
@@ -484,7 +498,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
             flattened_positions = list(chain.from_iterable(self.beam_positions_denorm))
             flattened_predictions = list(chain.from_iterable(self.beam_targets_denorm))
-            best = np.argsort(abs(np.array(flattened_predictions)-self.desired))[0]
+            best = int(np.argsort(abs(np.array(flattened_predictions)-self.desired))[0])
 
             self.best_position = flattened_positions[best]
             self.best_prediction = flattened_predictions[best]
@@ -552,7 +566,8 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
             self.stochastic_best_position = self.stochastic_configurations[best]
             self.stochastic_best_prediction = self.stochastic_predictions[best]
-
+            for i in range(len(self.stochastic_configurations)):
+                print(self.stochastic_configurations[i], self.stochastic_predictions[i])
             return self.stochastic_configurations, self.stochastic_predictions, self.stochastic_best_position,self.stochastic_best_prediction, self.prediction_all
 
 
@@ -661,15 +676,17 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
         elif strategy == 'manual' :
             configurations, predictions, best_config, best_pred, pred_all = L.manual(starting_point = starting_point, index = index, up = up)
             print('Local manual')
-    if mode == 'global' and len(predictions) > 1:
-        configurations = configurations[1:]
-        predictions = predictions[1:]
-        pred_all = pred_all[1:]
+
+    # if mode == 'global' and len(predictions) > 1:
+    #     configurations = configurations[1:]
+    #     predictions = predictions[1:]
+    #     pred_all = pred_all[1:]
         
     # configurations = [
     #     [data_type[col](value) for col, value in enumerate(configurations[row])]
     #     for row in range(len(configurations))
     # ]
     # best_config = [data_type[i](c) for i, c in enumerate(best_config)]
-        
+    
+    
     return configurations, predictions, best_config, best_pred, pred_all
