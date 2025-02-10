@@ -240,6 +240,7 @@ def login():
 
         # 로그인 성공: 세션에 사용자 ID 저장
         session["user_id"] = data["ID"]
+        session["user_rank"] = user_doc["User_Profile"]["RANK"]  # Add rank to session
 
         # ----------------- 사용자 폴더 구조 확인 및 생성 -----------------
         # 헬퍼 함수를 사용하면, 폴더가 존재하지 않을 경우 자동으로 생성됩니다.
@@ -287,8 +288,14 @@ def get_user():
 
         # User_Profile은 이제 필드이므로 직접 접근
         profile_data = user_doc.get("User_Profile", {})
+        user_rank = profile_data.get("RANK", 0)  # ✅ rank 추출
         
-        return jsonify({"status": "success", "user": user_doc, "profile": profile_data}), 200
+        return jsonify({
+        "status": "success", 
+        "user": user_doc, 
+        "profile": profile_data,
+        "rank": user_rank  # ✅ rank를 별도 필드로 추가
+    }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -306,6 +313,7 @@ def update_password():
         user_id = session["user_id"]
         user_ref = db.collection("User").document(user_id)
         user_doc = user_ref.get().to_dict()
+        
         if not user_doc:
             return jsonify({"status": "error", "message": "사용자를 찾을 수 없습니다."}), 404
         if user_doc["PW"] != data["old_password"]:
