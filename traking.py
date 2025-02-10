@@ -118,7 +118,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 self.range.append(max_ - min_)
 
                 # Normalize the column and add to the DataFrame
-                normalized_column = (data[:, i]-min_) / (max_ - min_)
+                normalized_column = (data[:, i]) / (max_ - min_)
                 self.data = pd.concat([self.data, pd.DataFrame(normalized_column)], axis=1)
 
             # Convert normalized data to a torch tensor
@@ -153,7 +153,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 # element가 numpy 배열인 경우 스칼라 값으로 변환
                 scalar_val = float(element)
                 # 원래 스케일로 복원
-                scalar_val = (scalar_val + self.min[i]) * (self.max[i] - self.min[i])
+                scalar_val = (scalar_val) * (self.max[i] - self.min[i])   #+ self.min[i]
                 # 반올림: precisions[i]는 정수여야 함
                 scalar_val = round(scalar_val, precisions[i])
                 new_data.append(scalar_val)
@@ -169,10 +169,15 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                                  for i in range(input_size)]
             self.lower_bounds = [np.array(list(constraints.values()))[:,1][i] / (feature.max[i] - feature.min[i])  
                                  for i in range(input_size)]    
-
+            # 디버그 출력
+            print("=== 각 피처에 대한 scaling factor (unit_by_feature) ===")
+            for i in range(input_size):
+                print(f"Feature {i+1}: unit_by_feature = {self.unit_by_feature[i]}, "
+                    f"upper_bound = {self.upper_bounds[i]}, lower_bound = {self.lower_bounds[i]}")
             self.raw_unit = np.array(list(constraints.values()))[:,0].tolist()
             self.raw_lower = np.array(list(constraints.values()))[:,1].tolist()
             self.raw_upper = np.array(list(constraints.values()))[:,2].tolist()
+            
 
         def predict(self, models, x, y_prime, modeling, fake_gradient = True):
             predictions,gradients = [], []
@@ -212,8 +217,10 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             new = []
             for k, element in enumerate(configuration):
                 element = element - (element % self.unit_by_feature[k])
-                if element >= self.upper_bounds[k] : element = self.upper_bounds[k]
-                elif element <= self.lower_bounds[k] : element = self.lower_bounds[k]
+                if element >= self.upper_bounds[k]:
+                    element = self.upper_bounds[k]
+                elif element <= self.lower_bounds[k]:
+                    element = self.lower_bounds[k]
                 else: pass
                 new.append(element)        
             configuration = torch.tensor(new, dtype = dtype)        
@@ -512,9 +519,11 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             tolerance = self.tolerance
             final = None
 
-            x_i = [starting_point[i] / (feature.max[i] - feature.min[i]) for i in range(input_size)]  
-            x_prime = torch.tensor([x_i[i] - (x_i[i] % self.unit_by_feature[i]) for i in range(len(self.unit_by_feature))], 
-                                   dtype = dtype)
+            # x_i = [starting_point[i] / (feature.max[i] - feature.min[i]) for i in range(input_size)]  
+            # x_prime = torch.tensor([x_i[i] - (x_i[i] % self.unit_by_feature[i]) for i in range(len(self.unit_by_feature))], 
+            #                        dtype = dtype)
+            x_i = [float(starting_point[i]) / (feature.max[i] - feature.min[i]) for i in range(input_size)]
+            x_prime = torch.tensor([x_i[i] - (x_i[i] % self.unit_by_feature[i]) for i in range(len(self.unit_by_feature))], dtype=dtype)
 
             self.stochastic_chosen = []
             self.stochastic_predictions = []

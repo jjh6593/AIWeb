@@ -1,4 +1,5 @@
 import firebase_admin
+import csv
 from firebase_admin import credentials, firestore, auth as firebase_auth
 from flask import Flask, request, jsonify, send_from_directory, make_response,session
 from functools import wraps
@@ -42,12 +43,12 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # Python 기본 random 모듈 시드 설정
-random.seed(2025)
+random.seed(45)
 # NumPy 시드 설정
-np.random.seed(2025)
+np.random.seed(45)
 # PyTorch 시드 설정 (CPU 및 GPU)
-torch.manual_seed(2025)
-torch.cuda.manual_seed_all(2025)  # 모든 GPU에 적용
+torch.manual_seed(45)
+torch.cuda.manual_seed_all(45)  # 모든 GPU에 적용
 app = Flask(__name__)
 app.secret_key = "super_secret_key_123!"  # ✅ 비밀 키 설정 (중요)
 import os
@@ -65,7 +66,10 @@ app.config.update(
 # 특정 Origin 허용
 # CORS(app, supports_credentials=True,resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173","http://localhost:5173/", "http://127.0.0.1:5173/"]}})
 # origins 옵션에 정확한 도메인만 명시
-CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
+# CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
+CORS(app,
+     supports_credentials=True,
+     resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}})
 
 # 업로드 및 모델 저장 디렉토리 설정
 mimetypes.init()
@@ -226,24 +230,36 @@ def login():
         return jsonify({"status": "error", "message": "ID와 PW가 필요합니다."}), 400
     try:
         user_ref = db.collection("User").document(data["ID"])
-        user_doc = user_ref.get().to_dict()
-        if not user_doc:
+        snapshot = user_ref.get()
+        if not snapshot.exists:
             return jsonify({"status": "error", "message": "사용자가 존재하지 않습니다."}), 404
+
+        user_doc = snapshot.to_dict()
         if user_doc["PW"] != data["PW"]:
             return jsonify({"status": "error", "message": "비밀번호가 틀렸습니다."}), 401
-        session.permanent = True
+
+        # 로그인 성공: 세션에 사용자 ID 저장
         session["user_id"] = data["ID"]
-        response = jsonify({"status": "success", "message": "로그인 성공", "user": user_doc})
 
-        response.set_cookie('session', session.get('user_id'), 
-                       secure=True, 
-                       samesite=None, 
-                       httponly=True)
-        print("Current session:", session)  # 세션 상태 로깅
-        print("Cookies:", request.cookies)  # 쿠키 상태 로깅
+        # ----------------- 사용자 폴더 구조 확인 및 생성 -----------------
+        # 헬퍼 함수를 사용하면, 폴더가 존재하지 않을 경우 자동으로 생성됩니다.
+        base_folder     = get_user_base_folder()    # 예: os.getcwd()/users/{user_id}
+        metadata_folder = get_user_metadata_folder()  # 예: base_folder/metadata
+        model_folder    = get_user_model_folder()     # 예: base_folder/model
+        output_folder   = get_user_output_folder()    # 예: base_folder/output
+        upload_folder   = get_user_upload_folder()    # 예: base_folder/upload
 
-        return response, 200
+        # (필요하다면 로그로 폴더 경로를 확인할 수 있습니다.)
+        logging.info(f"사용자 기본 폴더: {base_folder}")
+        logging.info(f"메타데이터 폴더: {metadata_folder}")
+        logging.info(f"모델 폴더: {model_folder}")
+        logging.info(f"출력 폴더: {output_folder}")
+        logging.info(f"업로드 폴더: {upload_folder}")
+
+        return jsonify({"status": "success", "message": "로그인 성공", "user": user_doc}), 200
+
     except Exception as e:
+        logging.error(str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ----------------- 로그아웃 API -----------------
@@ -440,12 +456,14 @@ def get_csv_files():
     files = os.listdir(get_user_upload_folder())
     return jsonify({'status': 'success', 'files': files})
 
-
 @app.route('/api/save_csv_metadata', methods=['POST'])
 @login_required
 def save_csv_metadata():
     """
-    메타데이터를 새로 생성하거나, 기존 메타데이터를 갱신(덮어쓰기)하기 위한 엔드포인트.
+    메타데이터를 새로 생성하거나 기존 메타데이터를 갱신(덮어쓰기)하는 엔드포인트.
+    클라이언트가 전달한 metadata 항목 중 각 column에 대해,
+    업로드 폴더 내 해당 CSV 파일의 데이터를 읽어 최소값(min)과 최대값(max)을 산출합니다.
+    
     요청 예:
         {
           "filename": "example.csv",
@@ -453,16 +471,12 @@ def save_csv_metadata():
             {
               "column": "Temperature",
               "unit": "C",
-              "min": 0,
-              "max": 100,
               "data_type": "float",
               "round": 2
             },
             {
               "column": "Pressure",
               "unit": "bar",
-              "min": 1,
-              "max": 50,
               "data_type": "float",
               "round": 2
             }
@@ -486,21 +500,53 @@ def save_csv_metadata():
     if not metadata:
         return jsonify({'status': 'error', 'message': 'metadata가 비어 있습니다.'}), 400
 
-    # 실제 CSV 파일이 사용자 업로드 폴더에 존재하는지 체크 (선택적으로)
+    # CSV 파일 경로는 사용자의 업로드 폴더 내부로 지정
     csv_path = os.path.join(get_user_upload_folder(), filename)
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
 
-    # unit, min, max 등을 float, int로 변환
-    for item in metadata:
-        item['unit'] = float(item.get('unit', 0.0))
-        item['min'] = float(item.get('min', 0.0))
-        item['max'] = float(item.get('max', 0.0))
-        item['round'] = int(item.get('round', 0))
-        data_type_str = item.get('data_type', 'float').lower()
-        item['data_type'] = data_type_str
+    # CSV 파일을 열어 metadata에 명시된 각 컬럼의 최소값과 최대값을 계산
+    computed_stats = {}
+    # metadata에서 처리할 컬럼 이름들의 집합
+    columns_to_process = {item.get('column') for item in metadata if item.get('column')}
+    
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                for col in columns_to_process:
+                    # CSV에 해당 컬럼이 존재하고 값이 비어있지 않은 경우에만 처리
+                    if col in row and row[col] != '':
+                        try:
+                            value = float(row[col])
+                        except ValueError:
+                            # 값이 숫자로 변환되지 않으면 해당 행은 건너뜁니다.
+                            continue
+                        if col not in computed_stats:
+                            computed_stats[col] = {"min": value, "max": value}
+                        else:
+                            computed_stats[col]["min"] = min(computed_stats[col]["min"], value)
+                            computed_stats[col]["max"] = max(computed_stats[col]["max"], value)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f"CSV 파싱 에러: {str(e)}"}), 500
 
-    # 메타데이터 저장 경로: 로그인한 사용자의 메타데이터 폴더를 사용
+    # metadata 항목에 대해 계산된 최소/최대값을 업데이트
+    for item in metadata:
+        col = item.get('column')
+        if col in computed_stats:
+            item['min'] = computed_stats[col]['min']
+            item['max'] = computed_stats[col]['max']
+        else:
+            # CSV에 해당 컬럼이 존재하지 않거나 숫자로 변환되지 않는 경우 None 처리하거나
+            # 기본값을 지정할 수 있습니다.
+            item['min'] = None
+            item['max'] = None
+
+        # unit은 문자형으로 남기고, 나머지 타입 정보는 변환합니다.
+        item['round'] = int(item.get('round', 0))
+        item['data_type'] = item.get('data_type', 'float').lower()
+
+    # 메타데이터 저장 경로는 사용자의 메타데이터 폴더 내부
     metadata_path = os.path.join(get_user_metadata_folder(), f"{filename}_metadata.json")
     try:
         with open(metadata_path, 'w', encoding='utf-8') as f:
@@ -512,6 +558,77 @@ def save_csv_metadata():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+# @app.route('/api/save_csv_metadata', methods=['POST'])
+# @login_required
+# def save_csv_metadata():
+#     """
+#     메타데이터를 새로 생성하거나, 기존 메타데이터를 갱신(덮어쓰기)하기 위한 엔드포인트.
+#     요청 예:
+#         {
+#           "filename": "example.csv",
+#           "metadata": [
+#             {
+#               "column": "Temperature",
+#               "unit": "C",
+#               "min": 0,
+#               "max": 100,
+#               "data_type": "float",
+#               "round": 2
+#             },
+#             {
+#               "column": "Pressure",
+#               "unit": "bar",
+#               "min": 1,
+#               "max": 50,
+#               "data_type": "float",
+#               "round": 2
+#             }
+#           ]
+#         }
+#     응답 예:
+#         {
+#           "status": "success",
+#           "message": "Metadata saved/updated successfully.",
+#           "saved_metadata": [...]
+#         }
+#     """
+#     data = request.json
+#     print(data)
+#     filename = data.get('filename')
+#     metadata = data.get('metadata', [])
+
+#     if not filename:
+#         return jsonify({'status': 'error', 'message': 'filename 파라미터가 필요합니다.'}), 400
+
+#     if not metadata:
+#         return jsonify({'status': 'error', 'message': 'metadata가 비어 있습니다.'}), 400
+
+#     # 실제 CSV 파일이 사용자 업로드 폴더에 존재하는지 체크 (선택적으로)
+#     csv_path = os.path.join(get_user_upload_folder(), filename)
+#     if not os.path.exists(csv_path):
+#         return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
+
+#     # unit, min, max 등을 float, int로 변환
+#     for item in metadata:
+#         item['unit'] = float(item.get('unit', 0.0))
+#         item['min'] = float(item.get('min', 0.0))
+#         item['max'] = float(item.get('max', 0.0))
+#         item['round'] = int(item.get('round', 0))
+#         data_type_str = item.get('data_type', 'float').lower()
+#         item['data_type'] = data_type_str
+
+#     # 메타데이터 저장 경로: 로그인한 사용자의 메타데이터 폴더를 사용
+#     metadata_path = os.path.join(get_user_metadata_folder(), f"{filename}_metadata.json")
+#     try:
+#         with open(metadata_path, 'w', encoding='utf-8') as f:
+#             json.dump(metadata, f, ensure_ascii=False, indent=2)
+#         return jsonify({
+#             'status': 'success',
+#             'message': 'Metadata saved/updated successfully.',
+#             'saved_metadata': metadata
+#         })
+#     except Exception as e:
+#         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 # 3 CSV 파일 내용 가져오기
@@ -682,7 +799,7 @@ def save_model():
         round_digits = 2 if dtype_val == float else 0
 
         constraints[col_name] = [unit_val, min_val, max_val, dtype_val, round_digits]
-
+    print(f'constraints : {constraints}')
     
     # ---------------------------
     # (3) 결측치 처리, X / y 분리
@@ -1370,8 +1487,6 @@ def submit_prediction():
         print(f'model_list{models_list}')
         # max_boundary 및 min_boundary를 DataFrame에서 직접 추출
         # ---------------------------------------min,max 값일일히 설정하는거 방지-------------------------------------------------
-        upper_bound = df.max().tolist()  # 각 컬럼의 최대값
-        lower_bound = df.min().tolist()  # 각 컬럼의 최소값
         
         if strategy == "best one":
             strategy = "best_one"
@@ -1382,7 +1497,10 @@ def submit_prediction():
         print(f'beam_width : {beam_width}')
         print(f'num_candidates : {num_candidates}')
         print(f'escape : {escape}')
-        
+        print(f'max_boundary : {max_boundary}')
+        print(f'min_boundary : {min_boundary}')
+        print(f'upper_bound : {upper_bound}')
+        print(f'lower_bound : {lower_bound}')
         pred_all = None  # 미리 선언
         # 파일 경로 설정 (폴더명 기반 파일 이름 생성)
         input_file_path = os.path.join(subfolder_path, f'{save_name}_input.json')
@@ -1398,8 +1516,8 @@ def submit_prediction():
                                                           top_k = top_k, index = index,
                                                           up = up, alternative = alternative,
                                                           unit = units,
-                                                          lower_bound = lower_bound, 
-                                                          upper_bound = upper_bound, 
+                                                          lower_bound = min_boundary, 
+                                                          upper_bound = max_boundary, 
                                                           data_type = data_type, decimal_place = decimal_place)
         
         # 현재 시각(날짜) 정보
@@ -1708,7 +1826,8 @@ def rerun_prediction():
                 converted_values[param] = int(value) if value is not None else None
             except ValueError:
                 converted_values[param] = None
-
+        print(max_boundary)
+        print(min_boundary)
         tolerance = converted_values['tolerance']
         beam_width = converted_values['beam_width']
         num_candidates = converted_values['num_candidates']
@@ -1755,8 +1874,8 @@ def rerun_prediction():
             up=up,
             alternative=alternative,
             unit=units,
-            lower_bound=lower_bound,
-            upper_bound=upper_bound,
+            lower_bound=min_boundary,
+            upper_bound=max_boundary,
             data_type=data_type_list,
             decimal_place=decimal_place
         )
