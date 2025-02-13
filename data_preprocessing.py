@@ -60,7 +60,7 @@ class MinMaxScaling:
         new_data = []
         for i, element in enumerate(data):
             # 역정규화
-            element = element * (self.max[i] - self.min[i])  + self.min[i]  # + min[i]? (기존 코드엔 +min이 생략되어있을 수도 있음)
+            element = element * (self.max[i] - self.min[i])  # + self.min[i]  # + min[i]? (기존 코드엔 +min이 생략되어있을 수도 있음)
             # round 자릿수
             # ex) round_digits = self.constraints[some_key][4] ...
             # 여기서는 단순히 i번째 constraint를 가져온다고 가정.

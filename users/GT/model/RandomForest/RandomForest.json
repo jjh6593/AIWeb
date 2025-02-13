@@ -1,0 +1,38 @@
+{
+    "model_type": "scikit",
+    "model_name": "RandomForest",
+    "model_selected": "RandomForestRegressor",
+    "parameters": {
+        "n_estimators": 100,
+        "criterion": "squared_error",
+        "max_depth": 3,
+        "min_samples_split": 2,
+        "min_samples_leaf": 1,
+        "max_features": "sqrt"
+    },
+    "framework": "sklearn",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/RandomForest/RandomForest.pkl",
+    "input_size": null,
+    "train_loss": 0.007548715791507309,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.008370331778454095,
+    "creation_time": "2025-02-13 17:12:25",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.007548715791507309,
+            "train_rmse": 0.08688334588117166,
+            "train_rae": 4060.0636294083615,
+            "val_mse": 0.008370331778454095,
+            "val_rmse": 0.09148951731457595,
+            "val_rae": 1014.3742832462983
+        },
+        "original": {
+            "train_mse": 5.918193180541731,
+            "train_rmse": 2.4327336846728067,
+            "train_rae": 4060.063629408371,
+            "val_mse": 6.562340114308011,
+            "val_rmse": 2.561706484808127,
+            "val_rae": 1014.374283246299
+        }
+    }
+}

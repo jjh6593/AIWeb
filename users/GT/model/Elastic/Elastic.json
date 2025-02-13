@@ -1,0 +1,37 @@
+{
+    "model_type": "scikit",
+    "model_name": "Elastic",
+    "model_selected": "ElasticNet",
+    "parameters": {
+        "alpha": 1,
+        "l1_ratio": 0.5,
+        "fit_intercept": true,
+        "max_iter": 1000,
+        "tol": 0.0001
+    },
+    "framework": "sklearn",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/Elastic/Elastic.pkl",
+    "input_size": null,
+    "train_loss": 0.013077816738902097,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.013973545584076095,
+    "creation_time": "2025-02-13 17:11:57",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.013077816738902097,
+            "train_rmse": 0.11435828233627024,
+            "train_rae": 3340.999991725329,
+            "val_mse": 0.013973545584076095,
+            "val_rmse": 0.11820975249139173,
+            "val_rae": 831.8957164134041
+        },
+        "original": {
+            "train_mse": 10.253008323298799,
+            "train_rmse": 3.202031905415497,
+            "train_rae": 3341.0000005531124,
+            "val_mse": 10.955259538018836,
+            "val_rmse": 3.309873039561916,
+            "val_rae": 831.8957122840367
+        }
+    }
+}

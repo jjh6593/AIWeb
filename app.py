@@ -551,6 +551,7 @@ def save_csv_metadata():
             item['max'] = None
 
         # unit은 문자형으로 남기고, 나머지 타입 정보는 변환합니다.
+        item['unit'] = float(item.get('unit', ''))
         item['round'] = int(item.get('round', 0))
         item['data_type'] = item.get('data_type', 'float').lower()
 
@@ -566,77 +567,6 @@ def save_csv_metadata():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-# @app.route('/api/save_csv_metadata', methods=['POST'])
-# @login_required
-# def save_csv_metadata():
-#     """
-#     메타데이터를 새로 생성하거나, 기존 메타데이터를 갱신(덮어쓰기)하기 위한 엔드포인트.
-#     요청 예:
-#         {
-#           "filename": "example.csv",
-#           "metadata": [
-#             {
-#               "column": "Temperature",
-#               "unit": "C",
-#               "min": 0,
-#               "max": 100,
-#               "data_type": "float",
-#               "round": 2
-#             },
-#             {
-#               "column": "Pressure",
-#               "unit": "bar",
-#               "min": 1,
-#               "max": 50,
-#               "data_type": "float",
-#               "round": 2
-#             }
-#           ]
-#         }
-#     응답 예:
-#         {
-#           "status": "success",
-#           "message": "Metadata saved/updated successfully.",
-#           "saved_metadata": [...]
-#         }
-#     """
-#     data = request.json
-#     print(data)
-#     filename = data.get('filename')
-#     metadata = data.get('metadata', [])
-
-#     if not filename:
-#         return jsonify({'status': 'error', 'message': 'filename 파라미터가 필요합니다.'}), 400
-
-#     if not metadata:
-#         return jsonify({'status': 'error', 'message': 'metadata가 비어 있습니다.'}), 400
-
-#     # 실제 CSV 파일이 사용자 업로드 폴더에 존재하는지 체크 (선택적으로)
-#     csv_path = os.path.join(get_user_upload_folder(), filename)
-#     if not os.path.exists(csv_path):
-#         return jsonify({'status': 'error', 'message': '해당 CSV 파일이 존재하지 않습니다.'}), 404
-
-#     # unit, min, max 등을 float, int로 변환
-#     for item in metadata:
-#         item['unit'] = float(item.get('unit', 0.0))
-#         item['min'] = float(item.get('min', 0.0))
-#         item['max'] = float(item.get('max', 0.0))
-#         item['round'] = int(item.get('round', 0))
-#         data_type_str = item.get('data_type', 'float').lower()
-#         item['data_type'] = data_type_str
-
-#     # 메타데이터 저장 경로: 로그인한 사용자의 메타데이터 폴더를 사용
-#     metadata_path = os.path.join(get_user_metadata_folder(), f"{filename}_metadata.json")
-#     try:
-#         with open(metadata_path, 'w', encoding='utf-8') as f:
-#             json.dump(metadata, f, ensure_ascii=False, indent=2)
-#         return jsonify({
-#             'status': 'success',
-#             'message': 'Metadata saved/updated successfully.',
-#             'saved_metadata': metadata
-#         })
-#     except Exception as e:
-#         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 # 3 CSV 파일 내용 가져오기
@@ -705,7 +635,11 @@ def save_model():
     csv_filename = data.get('csv_filename')
     hyperparams = data.get('hyperparameters', {})
     target_column = "Target"
-    epochs = hyperparams.get('epoch', 100) # 디폴트 0.001
+    print(hyperparams)
+    epochs = hyperparams.get('epochs', 1000) # 디폴트 0.001
+    lr = hyperparams.get('learning_rate',0.001)
+    batch_size = hyperparams.get('batch_size', 32)
+
     user_model_folder = get_user_model_folder()
     save_dir = os.path.join(user_model_folder, model_name)
     os.makedirs(save_dir, exist_ok=True)
@@ -838,7 +772,7 @@ def save_model():
     try:
         #print("모델 학습 시작...")
         if isinstance(model, torch.nn.Module):
-            training_losses = _train_nn(model, X_train_np, y_train_np, epochs)
+            training_losses = _train_nn(model, X_train_np, y_train_np, epochs,lr,batch_size)
         else:
             model.fit(X_train_np, y_train_np)  # 여기서 에러 발생 가능성 확인
         #print("모델 학습 완료.")
@@ -1307,21 +1241,28 @@ def submit_prediction():
         
         models = None
         mode = data['option'].lower()
-        desired = int(data['desire'])
+        desired = float(data['desire'])
         modeling = data['modeling_type'].lower()
         strategy = data['strategy'].lower()
-        tolerance = data.get('tolerance', None)
+        tolerance = float(data.get('tolerance', None))
         beam_width = data.get('beam_width', None)
         num_candidates = data.get('num_candidates', None)
         
         top_k = data.get('top_k', 2)
         index = data.get('index', 0)
         converted_values = {}
-        params = ['tolerance', 'beam_width', 'num_candidates', 'top_k', 'index']
-        for param in params:
+        params1 = [ 'beam_width', 'num_candidates', 'top_k', 'index']
+        params2 = ['tolerance']
+        for param in params1:
             value = data.get(param, None)
             try:
                 converted_values[param] = int(value) if value is not None else None
+            except ValueError:
+                converted_values[param] = None
+        for param in params2:
+            value = data.get(param, None)
+            try:
+                converted_values[param] = float(value) if value is not None else None
             except ValueError:
                 converted_values[param] = None
 
@@ -2008,31 +1949,6 @@ def delete_result():
     except Exception as e:
         logging.error(f"Error deleting folder {folder_path}: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-# 사용자 제공했던 EarlyStopping 클래스 그대로 사용
-class EarlyStopping:
-    def __init__(self, patience=10, delta=0.1):
-        self.patience = patience
-        self.delta = delta
-        self.counter = 0
-        self.best_score = None
-        self.early_stop = False
-        self.train_loss_min = float('inf')
-
-    def __call__(self, train_loss):
-        score = -train_loss
-        if self.best_score is None:
-            self.best_score = score
-            self.train_loss_min = train_loss
-        elif score < self.best_score + self.delta:
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
-        else:
-            self.best_score = score
-            self.counter = 0
-            self.train_loss_min = train_loss
 
 @login_required
 def load_constraints_from_metadata(csv_filename):

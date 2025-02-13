@@ -123,6 +123,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
             # Convert normalized data to a torch tensor
             self.data = torch.tensor(self.data.values, dtype=dtype)
+            print(self.data)
 
         def denormalize(self, data):
             """
@@ -383,7 +384,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 x = x.clone().detach().requires_grad_(True)
                 if isinstance(model, nn.Module):
                     prediction = model(x)
-                    loss = prediction - y_prime
+                    loss = abs(prediction - y_prime)
                     loss.backward()
                     gradient = x.grad.detach().numpy()
                     prediction = prediction.detach().numpy()
@@ -479,22 +480,22 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
 
                         adjustment = np.array(adjustment)
-                        # if prediction_avg > y_prime : 
-                        #     position = current_pos.clone().detach() - adjustment 
-                        # else :
-                        #     position = current_pos.clone().detach() + adjustment 
+                        if prediction_avg > y_prime : 
+                            position = current_pos.clone().detach() - adjustment 
+                        else :
+                            position = current_pos.clone().detach() + adjustment 
                         # update_delta를 한 번만 계산해서 적용
-                        if isinstance(self.models, nn.Module) or (isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models)):
-                            update_delta = -adjustment
-                        else:
-                            if prediction_avg > y_prime:
-                                update_delta = -adjustment
-                            elif prediction_avg < y_prime:
-                                update_delta = adjustment
-                            else:
-                                update_delta = np.zeros_like(adjustment)
+                        # if isinstance(self.models, nn.Module) or (isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models)):
+                        #     update_delta = -adjustment
+                        # else:
+                        #     if prediction_avg > y_prime:
+                        #         update_delta = -adjustment
+                        #     elif prediction_avg < y_prime:
+                        #         update_delta = adjustment
+                        #     else:
+                        #         update_delta = np.zeros_like(adjustment)
                         
-                        position = current_pos.clone().detach() + update_delta
+                        # position = current_pos.clone().detach() + update_delta
                         position = super().bounding(position)
                         candidates.append(position)
                         candidates_score.append(abs(gradient_avg[b]))
@@ -556,8 +557,6 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 else:
                     adjustment[chosen] -= self.unit_by_feature[chosen]
                 adjustment = np.array(adjustment)
-
-
                 update_delta = 0
                 if isinstance(self.models, nn.Module) or isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models):
                     update_delta = -adjustment
@@ -568,14 +567,14 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                         update_delta = adjustment
                     else: pass
                 x_prime += update_delta
-                
+                # x_prime 조정
                 # if prediction_avg > y_prime:
                 #     x_prime -= adjustment
                 # elif prediction_avg < y_prime:
                 #     x_prime += adjustment
                 # else: pass
+                # version
                 
-
                 x_prime = super().bounding(x_prime)
                 
                 prediction_original = target.denormalize(prediction_avg)
@@ -651,20 +650,20 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 print(f"Debug - Step {step}: prediction_avg={prediction_avg}, y_prime={y_prime}")
 
                 # 이전 업데이트 수식
-                # if prediction_avg > y_prime: x_prime -= adjustment 
-                # elif prediction_avg < y_prime: x_prime += adjustment
-                # else: pass
+                if prediction_avg > y_prime: x_prime -= adjustment 
+                elif prediction_avg < y_prime: x_prime += adjustment
+                else: pass
 
-                update_delta = 0
-                if isinstance(self.models, nn.Module) or isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models):
-                    update_delta = -adjustment
-                else:
-                    if prediction_avg > y_prime:
-                        update_delta = -adjustment
-                    elif prediction_avg < y_prime:
-                        update_delta = adjustment
-                    else: pass
-                x_prime += update_delta
+                # update_delta = 0
+                # if isinstance(self.models, nn.Module) or isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models):
+                #     update_delta = -adjustment
+                # else:
+                #     if prediction_avg > y_prime:
+                #         update_delta = -adjustment
+                #     elif prediction_avg < y_prime:
+                #         update_delta = adjustment
+                #     else: pass
+                # x_prime += update_delta
                 # x_prime 조정
                 x_prime = super().bounding(x_prime)
 

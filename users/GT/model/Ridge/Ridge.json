@@ -1,0 +1,35 @@
+{
+    "model_type": "scikit",
+    "model_name": "Ridge",
+    "model_selected": "Ridge",
+    "parameters": {
+        "alpha": 1,
+        "fit_intercept": true,
+        "solver": "auto"
+    },
+    "framework": "sklearn",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/Ridge/Ridge.pkl",
+    "input_size": null,
+    "train_loss": 0.0062039237906144325,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.0069912773381988645,
+    "creation_time": "2025-02-13 17:11:29",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.0062039237906144325,
+            "train_rmse": 0.07876499089452389,
+            "train_rae": 0.6780668108699628,
+            "val_mse": 0.0069912773381988645,
+            "val_rmse": 0.08361385852954559,
+            "val_rae": 0.7036322876931306
+        },
+        "original": {
+            "train_mse": 4.863876198360082,
+            "train_rmse": 2.2054197329216225,
+            "train_rae": 4218.940386683982,
+            "val_mse": 5.481161316710786,
+            "val_rmse": 2.3411880139601746,
+            "val_rae": 1069.6462804019611
+        }
+    }
+}

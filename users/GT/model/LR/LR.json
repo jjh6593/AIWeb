@@ -1,0 +1,33 @@
+{
+    "model_type": "scikit",
+    "model_name": "LR",
+    "model_selected": "LinearRegressor",
+    "parameters": {
+        "fit_intercept": true
+    },
+    "framework": "sklearn",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/LR/LR.pkl",
+    "input_size": null,
+    "train_loss": 0.0059788906459383295,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.007934937035146947,
+    "creation_time": "2025-02-13 17:11:20",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.0059788906459383295,
+            "train_rmse": 0.07732328656968954,
+            "train_rae": 0.6693120539839384,
+            "val_mse": 0.007934937035146947,
+            "val_rmse": 0.08907826353913141,
+            "val_rae": 0.7143692955347988
+        },
+        "original": {
+            "train_mse": 4.687450211831723,
+            "train_rmse": 2.165052011345622,
+            "train_rae": 4320.493227697787,
+            "val_mse": 6.220990441544142,
+            "val_rmse": 2.494191340203101,
+            "val_rae": 1114.0450182159063
+        }
+    }
+}

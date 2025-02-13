@@ -1,0 +1,39 @@
+{
+    "model_type": "pytorch",
+    "model_name": "MLP3",
+    "model_selected": "MLP_3",
+    "parameters": {
+        "input_size": 8,
+        "hidden_size_1": 64,
+        "hidden_size_2": 128,
+        "hidden_size_3": 64,
+        "learning_rate": 0.001,
+        "epochs": 1000,
+        "batch_size": 32
+    },
+    "framework": "pytorch",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/MLP3/MLP3.pt",
+    "input_size": 8,
+    "train_loss": 0.005079469472214587,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.006105164650352723,
+    "creation_time": "2025-02-13 17:18:06",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.005079469472214587,
+            "train_rmse": 0.07127039688548527,
+            "train_rae": 4360.175505877075,
+            "val_mse": 0.006105164650352723,
+            "val_rmse": 0.07813555304950956,
+            "val_rae": 1098.934393461488
+        },
+        "original": {
+            "train_mse": 3.9823039799488744,
+            "train_rmse": 1.9955710911788822,
+            "train_rae": 4360.175535792411,
+            "val_mse": 4.786448919090893,
+            "val_rmse": 2.187795447268984,
+            "val_rae": 1098.9343993363573
+        }
+    }
+}

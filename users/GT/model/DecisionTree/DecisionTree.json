@@ -1,0 +1,37 @@
+{
+    "model_type": "scikit",
+    "model_name": "DecisionTree",
+    "model_selected": "DecisionTreeRegressor",
+    "parameters": {
+        "criterion": "squared_error",
+        "splitter": "best",
+        "max_depth": 3,
+        "min_samples_split": 2,
+        "min_samples_leaf": 1
+    },
+    "framework": "sklearn",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/DecisionTree/DecisionTree.pkl",
+    "input_size": null,
+    "train_loss": 0.007431972957201837,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.008677325090569918,
+    "creation_time": "2025-02-13 17:12:15",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.007431972957201837,
+            "train_rmse": 0.08620889140455198,
+            "train_rae": 4182.603351764443,
+            "val_mse": 0.008677325090569918,
+            "val_rmse": 0.09315216095491247,
+            "val_rae": 1046.3529365698266
+        },
+        "original": {
+            "train_mse": 5.826666798446241,
+            "train_rmse": 2.413848959327456,
+            "train_rae": 4182.6033517644455,
+            "val_mse": 6.803022871006817,
+            "val_rmse": 2.6082605067375493,
+            "val_rae": 1046.3529365698266
+        }
+    }
+}

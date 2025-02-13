@@ -1,0 +1,39 @@
+{
+    "model_type": "scikit",
+    "model_name": "GBTR",
+    "model_selected": "GradientBoostingRegressor",
+    "parameters": {
+        "loss": "squared_error",
+        "learning_rate": 0.1,
+        "n_estimators": 100,
+        "subsample": 1,
+        "criterion": "squared_error",
+        "min_samples_split": 2,
+        "min_samples_leaf": 1
+    },
+    "framework": "sklearn",
+    "model_path": "/Users/jonghunjeon/Desktop/AIWeb/users/GT/model/GBTR/GBTR.pkl",
+    "input_size": null,
+    "train_loss": 0.004455009279817424,
+    "csv_filename": "abalone_encoded.csv",
+    "val_loss": 0.0063042465376834615,
+    "creation_time": "2025-02-13 17:12:36",
+    "metrics": {
+        "scaled": {
+            "train_mse": 0.004455009279817424,
+            "train_rmse": 0.06674585589995399,
+            "train_rae": 4334.986944109128,
+            "val_mse": 0.0063042465376834615,
+            "val_rmse": 0.07939928549857021,
+            "val_rae": 1092.6171921295204
+        },
+        "original": {
+            "train_mse": 3.492727275376861,
+            "train_rmse": 1.8688839651987121,
+            "train_rae": 4334.986944109127,
+            "val_mse": 4.942529285543833,
+            "val_rmse": 2.223179993959966,
+            "val_rae": 1092.6171921295208
+        }
+    }
+}

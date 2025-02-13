@@ -132,7 +132,7 @@ class MLPDynamic(nn.Module):
 
 # 사용자 제공했던 EarlyStopping 클래스 그대로 사용
 class EarlyStopping:
-    def __init__(self, patience=1000, delta=0.1):
+    def __init__(self, patience=10, delta=0.1):
         self.patience = patience
         self.delta = delta
         self.counter = 0
@@ -162,7 +162,7 @@ def _train_nn(model, X_train, y_train, epochs=1000, lr=0.001, batch_size=32):
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
-    early_stopping = EarlyStopping(patience=1000)
+    early_stopping = EarlyStopping(patience=100)
 
     # NumPy 배열을 PyTorch 텐서로 변환
     X_train = torch.tensor(X_train, dtype=torch.float32)
