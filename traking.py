@@ -11,14 +11,14 @@ import xgboost
 import sklearn
 from itertools import product
 from itertools import chain
-
+import itertools
 
 def parameter_prediction(data, models, desired, starting_point, mode, modeling, strategy, tolerance, beam_width,
         num_candidates, escape, top_k, index, up, alternative, unit, lower_bound, upper_bound, data_type, decimal_place):
 
     configuration_patience = 10
     configuration_patience_volume = 0.01
-    configuration_steps = 501
+    configuration_steps = 300 # step
     configuration_eta = 10
     configuration_eta_decay = 0.001
     configuration_show_steps = True
@@ -169,7 +169,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             self.upper_bounds = [np.array(list(constraints.values()))[:,2][i] / (feature.max[i] - feature.min[i])  
                                  for i in range(input_size)]
             self.lower_bounds = [np.array(list(constraints.values()))[:,1][i] / (feature.max[i] - feature.min[i])  
-                                 for i in range(input_size)]    
+                                 for i in range(input_size)]
             # 디버그 출력
             print("=== 각 피처에 대한 scaling factor (unit_by_feature) ===")
             for i in range(input_size):
@@ -376,30 +376,157 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 if isinstance(model, nn.Module): model.train()
                 self.models.append(model)
 
-        def predict_global(self, models, x, y_prime):
+        # def predict_global(self, models, x, y_prime):
+            
+        #     predictions,gradients = [], []
+        #     copy = x.clone()
+        #     for i, model in enumerate(models):
+        #         x = x.clone().detach().requires_grad_(True)
+        #         if isinstance(model, nn.Module):
+        #             prediction = model(x)
+        #             # loss = prediction - y_prime # 기존 방식
+        #             loss = abs(prediction - y_prime) # MAE
+        #             # loss = (prediction - y_prime) ** 2 # MSE
+        #             loss.backward()
+        #             gradient = x.grad.detach().numpy()
+        #             prediction = prediction.detach().numpy()
+                   
+        #         else:
+        #             # x = x.detach().numpy().reshape(1,-1)
+        #             # prediction = model.predict(x) # 모델의 출력 계산
+        #             # gradient = []
+        #             # print(f"x_np.shape: {x.shape}, dtype: {x.dtype}, type: {type(x)}")
+        #             # print(f"x first row: {x[0]}")  # 첫 번째 row 출력
+        #             # for j in range(x.shape[1]):
 
+        #             #     new_x = x.copy() # 복사
+        #             #     new_x[0,j] += self.unit_by_feature[j] # 입력의 각 특성을 단위만큼 증가
+        #             #     new_prediction = model.predict(new_x) # 새로운 예측값을 계산
+        #             #     slope = (new_prediction - prediction) / self.unit_by_feature[j] 
+        #             #     """ 미분 (sudo gradient 계산)
+        #             #     # (x1 + u1, x2, x3) (x1, x2 + u2 , x3) (x1, x2, x3 + u3) 3 **n개가 아닌 n개만큼만 계산
+        #             #     # 어떻게 하면 (x1 + u1, x2, x3) ,(x1) ... 3 ** n개가 되도록 만들 수 있을까?"""
+        #             #     gradient.append(slope)
+        #             #     # 수도 그래디언트를 계산할 때 
+        #             #     # 그라디언트는 자체로 벡터인데, 수도 그래디언트를 계산할 때 이동한 위치에서 그래디언트 성분을 스칼라로 계산하여 사용하고 있음
+        #             # gradient = np.array(gradient).reshape(-1)  
+
+
+
+        #             x_np = x.detach().numpy().reshape(1,-1)
+        #             prediction = model.predict(x_np) # 모델의 출력 계산
+                    
+        #             gradient = []
+        #             # 현재 오차 계산 (절대값)
+        #             best_error = np.abs(prediction - y_prime)
+        #             best_delta = np.zeros_like(x_np)
+        #             n_features = x_np.shape[1]
+                    
+        #             # 각 특성마다 -u, 0, +u를 고려하여 perturbation 옵션 생성
+        #             # self.unit_by_feature는 각 특성별 단위 변화량 (예: [u1, u2, u3, ...])
+        #             perturbation_options = [
+        #                 (-self.unit_by_feature[i], 0, self.unit_by_feature[i]) for i in range(n_features)
+        #             ]
+                    
+        #             # 3^n개의 조합을 모두 순회 (단, 모든 변화가 0인 경우는 제외)
+        #             for delta in itertools.product(*perturbation_options):
+                        
+        #                 delta = np.array(delta).reshape(1, -1)
+        #                 if not np.any(delta):  # 모든 변화가 0이면 건너뛰기
+        #                     continue
+        #                 new_x = x_np + delta
+        #                 new_prediction = model.predict(new_x)
+        #                 new_error = np.abs(new_prediction - y_prime)
+        #                 # 오차가 개선되면 해당 delta를 저장
+        #                 if new_error < best_error:
+        #                     best_error = new_error
+        #                     best_delta = delta
+                        
+                        
+        #             # best_delta가 오차를 줄이는 방향이면 이를 pseudo-gradient로 사용
+        #             # (단위 변화량으로 나누어 각 특성별 민감도를 구함)
+        #             gradient = best_delta.reshape(-1) / np.array(self.unit_by_feature)
+                                       
+        #         x = copy.clone()
+        #         predictions.append(prediction)
+        #         gradients.append(gradient)
+        #         # print(f'gradient.shape : {gradient.shape}')
+        #     return predictions, gradients
+        def predict_global(self, models, x, y_prime, method = "fd"):
+            
             predictions,gradients = [], []
             copy = x.clone()
             for i, model in enumerate(models):
+                
                 x = x.clone().detach().requires_grad_(True)
-                if isinstance(model, nn.Module):
-                    prediction = model(x)
-                    loss = abs(prediction - y_prime)
-                    loss.backward()
-                    gradient = x.grad.detach().numpy()
-                    prediction = prediction.detach().numpy()
-                   
+                # if isinstance(model, nn.Module):
+                #     prediction = model(x)
+                #     # loss = prediction - y_prime # 기존 방식
+                #     loss = abs(prediction - y_prime) # MAE
+                #     # loss = (prediction - y_prime) ** 2 # MSE
+                #     loss.backward()
+                #     gradient = x.grad.detach().numpy()
+                #     prediction = prediction.detach().numpy()
+                
+                # else:
+                    
+                # x = x.detach().numpy().reshape(1,-1)  # x : ndarray
+                # prediction = model.predict(x) # 모델의 출력 계산
+                # y = model.predict(x)
+                y = model(x)
+                prediction = y
+                
+                if method == "fd":
+                    best_g = [0] * len(self.unit_by_feature)
+                elif method == "target":
+                    best_g = abs(y_prime - y)
+                    best_change = [0] * len(self.unit_by_feature)
                 else:
-                    x = x.detach().numpy().reshape(1,-1)
-                    prediction = model.predict(x)
-                    gradient = []
-                    for j in range(x.shape[1]):
-                        new_x = x.copy()
-                        new_x[0,j] += self.unit_by_feature[j]
-                        new_prediction = model.predict(new_x)
-                        slope = (new_prediction - prediction) / self.unit_by_feature[j]
-                        gradient.append(slope)
-                    gradient = np.array(gradient).reshape(-1)   
+                    raise ValueError("Expected 'fd' or 'target', but got {}".format(method))
+
+                for change in itertools.product([-1, 0, 1], repeat=len(self.unit_by_feature)):
+                    '''
+                    x : ndarray
+                    change : Tuple
+                    unit_by_feature : List
+                    '''
+                    
+                    xx = x + np.array([xx2 * xx3 for xx2, xx3 in zip(change, self.unit_by_feature)])
+                    # yy = model.predict(xx)
+                    xx = torch.tensor(xx)
+                    yy = model(xx)
+                    # print("yy {}".format(yy))
+                    if method == "fd":  # finite difference-based
+                        l = abs(y_prime - y)
+                        ll = abs(y_prime - yy)
+                        # g = (yy - y) / np.array(unit_by_feature)
+                        g = (ll - l) / np.array(self.unit_by_feature)
+                        g_norm = np.linalg.norm(g)
+                        best_g_norm = np.linalg.norm(best_g)
+                        if best_g_norm < g_norm:
+                            best_g = g
+
+
+                        
+                    elif method == "target":  # target based
+                        g = abs(y_prime - yy)  # |target - pred|
+                        # print(f'g:{g}')
+                        if best_g > g:
+                            best_g = g
+                            best_change = change
+                        
+                        
+                    else:
+                        raise ValueError("Expected 'fd' or 'target', but got {}".format(method))
+                    
+                if method == "fd":
+                    gradient = np.array(best_g)
+                elif method == "target":
+                    gradient = np.array(best_change)
+                    print(f'gradient : {gradient}')
+                else:
+                    raise ValueError
+
                 x = copy.clone()
                 predictions.append(prediction)
                 gradients.append(gradient)
@@ -539,34 +666,87 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             self.stochastic_configurations = []
             self.stochastic_predictions_all = []
             self.prediction_all = []
-
+            method = "fd" # 변경사항
             for step in range(self.steps):
                 configuration = feature.denormalize(x_prime)
                 predictions, gradients = self.predict_global(self.models, x = x_prime, y_prime = y_prime)
-                prediction_avg = sum(predictions)/len(predictions) 
-                gradient_avg = sum(gradients)/len(gradients)
-
-                candidates = np.argsort(abs(gradient_avg))[::-1][:self.num_candidates] #[::-1]
-                chosen = random.choice(candidates)
-
-                adjustment = list(np.repeat(0,len(self.unit_by_feature)))
-
-                # adjustment 업데이트
-                if gradient_avg[chosen] >= 0:
-                    adjustment[chosen] += self.unit_by_feature[chosen]
+                
+                # 여기부터
+                if method == "fd":
+                    
+                    # gradients : (List of ndarray)
+                    # List => The number of list
+                    best_g = [0] * len(self.unit_by_feature)
+                    for i in range(len(gradients)):
+                        
+                        g_norm = np.linalg.norm(gradients[i])
+                        best_g_norm = np.linalg.norm(best_g)
+                        if best_g_norm < g_norm:
+                            best_g = gradients[i]
+                    sum_gradients = []
+                    for i in range(len(self.unit_by_feature)):
+                        
+                        if best_g[i] > 0:
+                            sum_gradients.append(1)
+                        elif best_g[i] < 0:
+                            sum_gradients.append(-1)
+                        else:
+                            sum_gradients.append(0)
+                    sum_gradients = np.array(sum_gradients)
+                    x_prime = x_prime - sum_gradients * self.unit_by_feature
+                    print(f'x_prime : {x_prime}')
+                # gradients : (List of ndarray)
+                elif method == "target":
+                # gradients : (List of ndarray)|
+                # (-1, 0, 1, .., 0), .., (1, 1, 1, .., 1) : # models
+                # 앙상블 방향 계산
+                # 각 모델별 방향 정보를 성분별로 더함 # 변수별 계산된 방향과 변수별 단위 곱하고 그걸 각 변수에 더하면 됨 # TODO : NN 모델 + DL 모델 앙상블인 경우 NN 모델에 대한 처리 필요
+                    # print(f'gradients : {gradients}')
+                    # print(f'unit_by_feature : {self.unit_by_feature}')
+                    # print(f'x_prime : {x_prime}')
+                    sum_gradients = sum(gradients) # List
+                    x_prime = x_prime + sum_gradients * self.unit_by_feature
+                    print(f'x_prime : {x_prime}')
+                    
                 else:
-                    adjustment[chosen] -= self.unit_by_feature[chosen]
-                adjustment = np.array(adjustment)
-                update_delta = 0
-                if isinstance(self.models, nn.Module) or isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models):
-                    update_delta = -adjustment
-                else:
-                    if prediction_avg > y_prime:
-                        update_delta = -adjustment
-                    elif prediction_avg < y_prime:
-                        update_delta = adjustment
-                    else: pass
-                x_prime += update_delta
+                    raise ValueError
+
+                
+
+                prediction_avg = sum(predictions)/len(predictions)
+                # 여기까지
+                # gradient_avg = sum(gradients)/len(gradients)
+
+                # prediction_avg = sum(predictions)/len(predictions) 
+                
+                # gradient_avg = sum(gradients)/len(gradients) # List of ndarray
+                
+                # candidates = np.argsort(abs(gradient_avg))[::-1][:self.num_candidates] #[::-1]
+                
+                # chosen = random.choice(candidates)
+                
+                # adjustment = list(np.repeat(0,len(self.unit_by_feature)))
+                
+                # # adjustment 업데이트
+                # if gradient_avg[chosen] >= 0:
+                #     adjustment[chosen] += self.unit_by_feature[chosen]
+                # else:
+                #     adjustment[chosen] -= self.unit_by_feature[chosen]
+                # adjustment = np.array(adjustment)
+
+                # update_delta = 0
+                # # if isinstance(self.models, nn.Module) or isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models):
+                # #     update_delta = -adjustment
+                # # else:
+                # #     if prediction_avg > y_prime:
+                # #         update_delta = -adjustment
+                # #     elif prediction_avg < y_prime:
+                # #         update_delta = adjustment
+                # #     else: pass
+                # # x_prime += update_delta
+                
+                # x_prime += adjustment
+
                 # x_prime 조정
                 # if prediction_avg > y_prime:
                 #     x_prime -= adjustment
@@ -575,8 +755,8 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 # else: pass
                 # version
                 
-                x_prime = super().bounding(x_prime)
-                
+                # x_prime = super().bounding(x_prime)
+                # print(f'self.unit_by_feature type : {type(self.unit_by_feature)}')
                 prediction_original = target.denormalize(prediction_avg)
                 if prediction_original is None:
                     raise ValueError(f"Step {step}: prediction_original is None")
@@ -588,7 +768,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 if configuration_show_steps and step % 10 == 0 and step != 0:
                     print(f"Step {step} Target : {self.desired}, Prediction : {prediction_original}")
 
-                self.stochastic_chosen.append(chosen)    
+                # self.stochastic_chosen.append(chosen)    
                 self.stochastic_predictions.append(prediction_original)
                 self.stochastic_configurations.append(configuration)
                 self.prediction_all.append([target.denormalize([e.item()])[0] for e in predictions])
@@ -664,6 +844,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 #         update_delta = adjustment
                 #     else: pass
                 # x_prime += update_delta
+
                 # x_prime 조정
                 x_prime = super().bounding(x_prime)
 
