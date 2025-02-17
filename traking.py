@@ -18,7 +18,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
 
     configuration_patience = 10
     configuration_patience_volume = 0.01
-    configuration_steps = 300 # step
+    configuration_steps = 100 # step
     configuration_eta = 10
     configuration_eta_decay = 0.001
     configuration_show_steps = True
@@ -170,6 +170,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                                  for i in range(input_size)]
             self.lower_bounds = [np.array(list(constraints.values()))[:,1][i] / (feature.max[i] - feature.min[i])  
                                  for i in range(input_size)]
+            
             # 디버그 출력
             print("=== 각 피처에 대한 scaling factor (unit_by_feature) ===")
             for i in range(input_size):
@@ -218,9 +219,12 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             new = []
             for k, element in enumerate(configuration):
                 element = element - (element % self.unit_by_feature[k])
+                # print(f"element % self.unit_by_feature[k] = {element % self.unit_by_feature[k]}")
                 if element >= self.upper_bounds[k]:
+                    # print("경계 상한 도달")
                     element = self.upper_bounds[k]
                 elif element <= self.lower_bounds[k]:
+                    # print("경계 하한 도달")
                     element = self.lower_bounds[k]
                 else: pass
                 new.append(element)        
@@ -371,6 +375,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             self.modeling = modeling
             self.strategy = strategy
             self.tolerance = tolerance / (target.max[0] - target.min[0])
+            self.original_tolerance = tolerance
             self.steps = steps
             for model in models : 
                 if isinstance(model, nn.Module): model.train()
@@ -452,80 +457,128 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
         #         gradients.append(gradient)
         #         # print(f'gradient.shape : {gradient.shape}')
         #     return predictions, gradients
-        def predict_global(self, models, x, y_prime, method = "fd"):
+        def predict_global(self, models, x, y_prime, method = "target", alpha=2.0, p = 0.01):
             
             predictions,gradients = [], []
             copy = x.clone()
             for i, model in enumerate(models):
                 
                 x = x.clone().detach().requires_grad_(True)
-                # if isinstance(model, nn.Module):
-                #     prediction = model(x)
-                #     # loss = prediction - y_prime # 기존 방식
-                #     loss = abs(prediction - y_prime) # MAE
-                #     # loss = (prediction - y_prime) ** 2 # MSE
-                #     loss.backward()
-                #     gradient = x.grad.detach().numpy()
-                #     prediction = prediction.detach().numpy()
+                # 변형은 여기부터
+                if isinstance(model, nn.Module):
+                    prediction = model(x)
+                    # loss = prediction - y_prime # 기존 방식
+                    loss = abs(prediction - y_prime) # MAE
+                    # loss = (prediction - y_prime) ** 2 # MSE
+                    loss.backward()
+                    gradient = x.grad.detach().numpy()
+                    prediction = prediction.detach().numpy()
                 
-                # else:
-                    
-                # x = x.detach().numpy().reshape(1,-1)  # x : ndarray
-                # prediction = model.predict(x) # 모델의 출력 계산
-                # y = model.predict(x)
-                y = model(x)
-                prediction = y
-                
-                if method == "fd":
-                    best_g = [0] * len(self.unit_by_feature)
-                elif method == "target":
-                    best_g = abs(y_prime - y)
-                    best_change = [0] * len(self.unit_by_feature)
                 else:
-                    raise ValueError("Expected 'fd' or 'target', but got {}".format(method))
-
-                for change in itertools.product([-1, 0, 1], repeat=len(self.unit_by_feature)):
-                    '''
-                    x : ndarray
-                    change : Tuple
-                    unit_by_feature : List
-                    '''
                     
-                    xx = x + np.array([xx2 * xx3 for xx2, xx3 in zip(change, self.unit_by_feature)])
-                    # yy = model.predict(xx)
-                    xx = torch.tensor(xx)
-                    yy = model(xx)
-                    # print("yy {}".format(yy))
-                    if method == "fd":  # finite difference-based
-                        l = abs(y_prime - y)
-                        ll = abs(y_prime - yy)
-                        # g = (yy - y) / np.array(unit_by_feature)
-                        g = (ll - l) / np.array(self.unit_by_feature)
-                        g_norm = np.linalg.norm(g)
-                        best_g_norm = np.linalg.norm(best_g)
-                        if best_g_norm < g_norm:
-                            best_g = g
+                    x = x.detach().numpy().reshape(1,-1)  # x : ndarray
+                    prediction = model.predict(x) # 모델의 출력 계산
+                    y = model.predict(x)
 
+                    # prediction = model(x) # 모델의 출력 계산
+                # y = model(x)
+                
+                    prediction = y
+                
+                    if method == "fd":
+                        
+                        best_g = [0] * len(self.unit_by_feature)
+                        # best_g를 리스트 대신 텐서로 초기화합니다
 
+                    elif method == "target":
                         
-                    elif method == "target":  # target based
-                        g = abs(y_prime - yy)  # |target - pred|
-                        # print(f'g:{g}')
-                        if best_g > g:
-                            best_g = g
-                            best_change = change
-                        
-                        
+                        best_g = abs(y_prime - y)
+                        best_change = [0] * len(self.unit_by_feature)
                     else:
                         raise ValueError("Expected 'fd' or 'target', but got {}".format(method))
+
+                    for change in itertools.product([-1, 0, 1], repeat=len(self.unit_by_feature)):
+                        '''
+                        x : ndarray
+                        change : Tuple
+                        unit_by_feature : List
+                        '''
+                        
+                        # xx = x + np.array([xx2 * xx3 for xx2, xx3 in zip(change, self.unit_by_feature)])
+                        if not np.random.uniform() < p:
+                            continue
+                        # 이거 아래가 정답
+                        xx = x.copy()
+                        # xx = x + alpha * np.array([xx2 * xx3 for xx2, xx3 in zip(change, self.unit_by_feature)])
+                        xx[0] = xx[0] + alpha * np.array([xx2 * xx3 for xx2, xx3 in zip(change, self.unit_by_feature)])
+                        xx[0] = np.clip(xx[0], a_min = self.lower_bounds, a_max = self.upper_bounds)
+                        
+                        
+
+                        # print(self.lower_bounds)
+                        # print(self.upper_bounds)
+                        # 이거는 DL 쓸 때
+                        # delta_tensor = torch.tensor([xx2 * xx3 for xx2, xx3 in zip(change, self.unit_by_feature)],
+                        #         dtype=x.dtype, device=x.device)
+                        # xx = x + alpha * delta_tensor
+
+                        # yy = model.predict(xx)
+                        # xx = torch.tensor(xx)
+                        # ML 적용
+                        yy = model.predict(xx)
+                        # DL 적용
+                        # yy = model(xx)
+                        
+                        # print("yy {}".format(yy))
+                        if method == "fd":  # finite difference-based
+                            
+                            l = abs(y_prime - y)
+                            ll = abs(y_prime - yy)
+                            # g = (yy - y) / np.array(unit_by_feature)
+                            # 아래 3개만 해제
+                            g = (ll - l) / np.array(self.unit_by_feature)
+                            g_norm = np.linalg.norm(g)
+                            best_g_norm = np.linalg.norm(best_g)
+
+
+                            # 기준
+                            # unit_tensor = torch.tensor(self.unit_by_feature, dtype=ll.dtype, device=ll.device)
+                            
+                            # g = (ll - l) / unit_tensor
+                            # g_np = g.detach().numpy()  # 여기서 detach()를 호출!
+                            # g_norm = np.linalg.norm(g_np)
+                            # best_g_norm = np.linalg.norm(best_g.detach().numpy())  # 여기서 detach()를 호출!
+                            # DL 일 때는 위에 5개 지우고
+                            
+                            
+                            if best_g_norm < g_norm:
+                                best_g = g
+
+                        elif method == "target":  # target based
+                            g = abs(y_prime - yy)  # |target - pred|
+                            # print(f'g:{g}')
+                            if best_g > g:
+                                best_g = g
+                                best_change = change
+                            
+                            
+                        else:
+                            raise ValueError("Expected 'fd' or 'target', but got {}".format(method))
+                    # 여기까지 들여쓰기
+                    # ML    
+                    if method == "fd":
+                        gradient = np.array(best_g)
+                    elif method == "target":
+                        gradient = np.array(best_change)
+                        print(f'gradient : {gradient}')
                     
-                if method == "fd":
-                    gradient = np.array(best_g)
-                elif method == "target":
-                    gradient = np.array(best_change)
-                    print(f'gradient : {gradient}')
-                else:
-                    raise ValueError
+                    # DL
+                    # if method == "fd":
+                    #     gradient = g.detach().numpy()  # best_g가 텐서라면 detach() 후 numpy() 호출
+                    # elif method == "target":
+                    #     gradient = np.array(best_change)  # best_change는 파이썬 리스트이므로 괜찮음
+                    # else:
+                    #     raise ValueError
 
                 x = copy.clone()
                 predictions.append(prediction)
@@ -658,16 +711,18 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             
             tolerance = self.tolerance
             final = None
-
+            
             x_i = [float(starting_point[i]) / (feature.max[i] - feature.min[i]) for i in range(input_size)]
             x_prime = torch.tensor([x_i[i] - (x_i[i] % self.unit_by_feature[i]) for i in range(len(self.unit_by_feature))], dtype=dtype)
+            
             self.stochastic_chosen = []
             self.stochastic_predictions = []
             self.stochastic_configurations = []
             self.stochastic_predictions_all = []
             self.prediction_all = []
-            method = "fd" # 변경사항
+            method = "target" # 변경사항
             for step in range(self.steps):
+                
                 configuration = feature.denormalize(x_prime)
                 predictions, gradients = self.predict_global(self.models, x = x_prime, y_prime = y_prime)
                 
@@ -693,7 +748,18 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                         else:
                             sum_gradients.append(0)
                     sum_gradients = np.array(sum_gradients)
-                    x_prime = x_prime - sum_gradients * self.unit_by_feature
+                    
+                    
+                    # x_prime = x_prime - sum_gradients * self.unit_by_feature # 이거 한줄이면 될거 아래 2줄 추가됌
+
+                    # 수정: torch tensor로 변환하면서, x_prime과 같은 dtype, device로 맞추기
+                    sum_gradients_tensor = torch.tensor(sum_gradients, dtype=x_prime.dtype, device=x_prime.device)
+
+                    # self.unit_by_feature가 리스트라면, torch tensor로 변환
+                    unit_by_feature_tensor = torch.tensor(self.unit_by_feature, dtype=x_prime.dtype, device=x_prime.device)
+
+                    # 이후 연산에서 모두 torch tensor를 사용
+                    x_prime = x_prime - sum_gradients_tensor * unit_by_feature_tensor
                     print(f'x_prime : {x_prime}')
                 # gradients : (List of ndarray)
                 elif method == "target":
@@ -704,14 +770,24 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                     # print(f'gradients : {gradients}')
                     # print(f'unit_by_feature : {self.unit_by_feature}')
                     # print(f'x_prime : {x_prime}')
+                    
                     sum_gradients = sum(gradients) # List
-                    x_prime = x_prime + sum_gradients * self.unit_by_feature
+                    # x_prime = x_prime + sum_gradients * self.unit_by_feature
+
+                    # 수정: torch tensor로 변환하면서, x_prime과 같은 dtype, device로 맞추기
+                    sum_gradients_tensor = torch.tensor(sum_gradients, dtype=x_prime.dtype, device=x_prime.device)
+
+                    # self.unit_by_feature가 리스트라면, torch tensor로 변환
+                    unit_by_feature_tensor = torch.tensor(self.unit_by_feature, dtype=x_prime.dtype, device=x_prime.device)
+
+                    # 이후 연산에서 모두 torch tensor를 사용
+                    x_prime = x_prime + sum_gradients_tensor * unit_by_feature_tensor
                     print(f'x_prime : {x_prime}')
+
                     
                 else:
                     raise ValueError
 
-                
 
                 prediction_avg = sum(predictions)/len(predictions)
                 # 여기까지
@@ -756,6 +832,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 # version
                 
                 # x_prime = super().bounding(x_prime)
+                x_prime = np. clip(x_prime, a_min=self.lower_bounds, a_max=self.upper_bounds)
                 # print(f'self.unit_by_feature type : {type(self.unit_by_feature)}')
                 prediction_original = target.denormalize(prediction_avg)
                 if prediction_original is None:
@@ -773,8 +850,9 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 self.stochastic_configurations.append(configuration)
                 self.prediction_all.append([target.denormalize([e.item()])[0] for e in predictions])
             #    self.stochastic_predictions_all.append(prediction_original_all)
-
-                if abs(prediction_avg - y_prime) < tolerance: break
+                
+                # if abs(prediction_avg - y_prime) < tolerance: break
+                if abs(prediction_original- self.desired) < self.original_tolerance: break
                     
             best = np.argsort(abs(np.array(self.stochastic_predictions)-self.desired))[0]
 
@@ -782,6 +860,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
             self.stochastic_best_prediction = self.stochastic_predictions[best]
             for i in range(len(self.stochastic_configurations)):
                 print(self.stochastic_configurations[i], self.stochastic_predictions[i])
+            
             return self.stochastic_configurations, self.stochastic_predictions, self.stochastic_best_position,self.stochastic_best_prediction, self.prediction_all
 
 
@@ -846,7 +925,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 # x_prime += update_delta
 
                 # x_prime 조정
-                x_prime = super().bounding(x_prime)
+                # x_prime = super().bounding(x_prime)
 
                 prediction_original = target.denormalize(prediction_avg)
                 prediction_original = prediction_original[0]
@@ -917,6 +996,9 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
     #     for row in range(len(configurations))
     # ]
     # best_config = [data_type[i](c) for i, c in enumerate(best_config)]
-    
+    print(f"configurations type: {type(configurations)}")
+    print(f"predictions type: {type(predictions)}")
+    print(f"best_config type: {type(best_config)}")
+    print(f"pred_all type: {type(pred_all)}")
     
     return configurations, predictions, best_config, best_pred, pred_all
