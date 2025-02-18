@@ -1,0 +1,24 @@
+{
+    "filename": "abalone_encoded.csv",
+    "save_name": "15-50",
+    "desire": 50.0,
+    "option": "global",
+    "modeling_type": "Single",
+    "strategy": "Stochastic",
+    "models": [
+        "MLP3"
+    ],
+    "starting_points": {
+        "Sex": "2",
+        "Length": "0.7",
+        "Diameter": "0.58",
+        "Height": "0.205",
+        "Whole Weight": "2.13",
+        "Shucked Weight": "0.7415",
+        "Viscera Weight": "0.49",
+        "Shell Weight": "0.58"
+    },
+    "tolerance": "0.1",
+    "num_candidates": "3",
+    "timestamp": "2025-02-18_21-22-23"
+}

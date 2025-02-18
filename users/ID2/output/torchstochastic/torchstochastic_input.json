@@ -1,0 +1,24 @@
+{
+    "filename": "abalone_encoded.csv",
+    "save_name": "torchstochastic",
+    "desire": 13.0,
+    "option": "global",
+    "modeling_type": "Single",
+    "strategy": "Stochastic",
+    "models": [
+        "RandomForest"
+    ],
+    "starting_points": {
+        "Sex": 150,
+        "Length": 25,
+        "Diameter": 40,
+        "Height": 1,
+        "Whole Weight": 120,
+        "Shucked Weight": 250,
+        "Viscera Weight": 10,
+        "Shell Weight": 25
+    },
+    "tolerance": "0.1",
+    "num_candidates": "3",
+    "timestamp": "2025-02-18_22-13-04"
+}
