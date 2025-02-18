@@ -223,10 +223,10 @@ def register():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ----------------- 로그인 API -----------------
-@app.route('/api/login', methods=['POST', 'OPTIONS'])
+@app.route('/api/login', methods=['POST'])
 def login():
-    if request.method == 'OPTIONS':
-        return '', 200  # Preflight 요청 처리
+    # if request.method == 'OPTIONS':
+    #     return '', 200  # Preflight 요청 처리
     data = request.get_json()
     if "ID" not in data or "PW" not in data:
         return jsonify({"status": "error", "message": "ID와 PW가 필요합니다."}), 400
