@@ -223,8 +223,10 @@ def register():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ----------------- 로그인 API -----------------
-@app.route('/api/login', methods=['POST'])
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
 def login():
+    if request.method == 'OPTIONS':
+        return '', 200  # Preflight 요청 처리
     data = request.get_json()
     if "ID" not in data or "PW" not in data:
         return jsonify({"status": "error", "message": "ID와 PW가 필요합니다."}), 400
@@ -1910,8 +1912,8 @@ def get_training_results():
                         'hyperparameter': hyperparams_data,
                         'erase': output_data.get('erase'),
                         'pred_all':output_data.get('pred_all')
-
                     })
+                
             except Exception as e:
                 print(f"Error reading {output_file_path}: {e}")
                 continue

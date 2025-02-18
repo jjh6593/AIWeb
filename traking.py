@@ -457,12 +457,12 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
         #         gradients.append(gradient)
         #         # print(f'gradient.shape : {gradient.shape}')
         #     return predictions, gradients
-        def predict_global(self, models, x, y_prime, method = "target", alpha=2.0, p = 0.01):
+        def predict_global(self, models, x, y_prime, method = "target", alpha=3, p = 0.01):
             
             predictions,gradients = [], []
             copy = x.clone()
             for i, model in enumerate(models):
-                
+                x = torch.tensor(x, dtype=torch.float32)
                 x = x.clone().detach().requires_grad_(True)
                 # 변형은 여기부터
                 if isinstance(model, nn.Module):
@@ -481,7 +481,7 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                     y = model.predict(x)
 
                     # prediction = model(x) # 모델의 출력 계산
-                # y = model(x)
+                    # y = model(x)
                 
                     prediction = y
                 
@@ -566,11 +566,11 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                             raise ValueError("Expected 'fd' or 'target', but got {}".format(method))
                     # 여기까지 들여쓰기
                     # ML    
-                    if method == "fd":
-                        gradient = np.array(best_g)
-                    elif method == "target":
-                        gradient = np.array(best_change)
-                        print(f'gradient : {gradient}')
+                        if method == "fd":
+                            gradient = np.array(best_g)
+                        elif method == "target":
+                            gradient = np.array(best_change)
+                            
                     
                     # DL
                     # if method == "fd":
@@ -579,8 +579,9 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                     #     gradient = np.array(best_change)  # best_change는 파이썬 리스트이므로 괜찮음
                     # else:
                     #     raise ValueError
-
+            
                 x = copy.clone()
+                
                 predictions.append(prediction)
                 gradients.append(gradient)
             return predictions, gradients
@@ -726,67 +727,86 @@ def parameter_prediction(data, models, desired, starting_point, mode, modeling, 
                 configuration = feature.denormalize(x_prime)
                 predictions, gradients = self.predict_global(self.models, x = x_prime, y_prime = y_prime)
                 
-                # 여기부터
-                if method == "fd":
+                if isinstance(self.models, nn.Module) or isinstance(self.models, list) and all(isinstance(m, nn.Module) for m in self.models):
+                    gradient_avg = sum(gradients)/len(gradients)
+                    prediction_avg = sum(predictions)/len(predictions) 
+                    gradient_avg = sum(gradients)/len(gradients) # List of ndarray
+                    candidates = np.argsort(abs(gradient_avg))[::-1][:self.num_candidates] #[::-1]
                     
-                    # gradients : (List of ndarray)
-                    # List => The number of list
-                    best_g = [0] * len(self.unit_by_feature)
-                    for i in range(len(gradients)):
-                        
-                        g_norm = np.linalg.norm(gradients[i])
-                        best_g_norm = np.linalg.norm(best_g)
-                        if best_g_norm < g_norm:
-                            best_g = gradients[i]
-                    sum_gradients = []
-                    for i in range(len(self.unit_by_feature)):
-                        
-                        if best_g[i] > 0:
-                            sum_gradients.append(1)
-                        elif best_g[i] < 0:
-                            sum_gradients.append(-1)
-                        else:
-                            sum_gradients.append(0)
-                    sum_gradients = np.array(sum_gradients)
+                    chosen = random.choice(candidates)
                     
+                    adjustment = list(np.repeat(0,len(self.unit_by_feature)))
                     
-                    # x_prime = x_prime - sum_gradients * self.unit_by_feature # 이거 한줄이면 될거 아래 2줄 추가됌
-
-                    # 수정: torch tensor로 변환하면서, x_prime과 같은 dtype, device로 맞추기
-                    sum_gradients_tensor = torch.tensor(sum_gradients, dtype=x_prime.dtype, device=x_prime.device)
-
-                    # self.unit_by_feature가 리스트라면, torch tensor로 변환
-                    unit_by_feature_tensor = torch.tensor(self.unit_by_feature, dtype=x_prime.dtype, device=x_prime.device)
-
-                    # 이후 연산에서 모두 torch tensor를 사용
-                    x_prime = x_prime - sum_gradients_tensor * unit_by_feature_tensor
-                    print(f'x_prime : {x_prime}')
-                # gradients : (List of ndarray)
-                elif method == "target":
-                # gradients : (List of ndarray)|
-                # (-1, 0, 1, .., 0), .., (1, 1, 1, .., 1) : # models
-                # 앙상블 방향 계산
-                # 각 모델별 방향 정보를 성분별로 더함 # 변수별 계산된 방향과 변수별 단위 곱하고 그걸 각 변수에 더하면 됨 # TODO : NN 모델 + DL 모델 앙상블인 경우 NN 모델에 대한 처리 필요
-                    # print(f'gradients : {gradients}')
-                    # print(f'unit_by_feature : {self.unit_by_feature}')
-                    # print(f'x_prime : {x_prime}')
-                    
-                    sum_gradients = sum(gradients) # List
-                    # x_prime = x_prime + sum_gradients * self.unit_by_feature
-
-                    # 수정: torch tensor로 변환하면서, x_prime과 같은 dtype, device로 맞추기
-                    sum_gradients_tensor = torch.tensor(sum_gradients, dtype=x_prime.dtype, device=x_prime.device)
-
-                    # self.unit_by_feature가 리스트라면, torch tensor로 변환
-                    unit_by_feature_tensor = torch.tensor(self.unit_by_feature, dtype=x_prime.dtype, device=x_prime.device)
-
-                    # 이후 연산에서 모두 torch tensor를 사용
-                    x_prime = x_prime + sum_gradients_tensor * unit_by_feature_tensor
-                    print(f'x_prime : {x_prime}')
-
+                    # adjustment 업데이트
+                    if gradient_avg[chosen] >= 0:
+                        adjustment[chosen] += self.unit_by_feature[chosen]
+                    else:
+                        adjustment[chosen] -= self.unit_by_feature[chosen]
+                    adjustment = np.array(adjustment)
+                    update_delta = -adjustment
+                    x_prime += update_delta
                     
                 else:
-                    raise ValueError
+                    # 여기부터
+                    if not method == "target":
+                        
+                        # gradients : (List of ndarray)
+                        # List => The number of list
+                        best_g = [0] * len(self.unit_by_feature)
+                        for i in range(len(gradients)):
+                            
+                            g_norm = np.linalg.norm(gradients[i])
+                            best_g_norm = np.linalg.norm(best_g)
+                            if best_g_norm < g_norm:
+                                best_g = gradients[i]
+                        sum_gradients = []
+                        for i in range(len(self.unit_by_feature)):
+                            
+                            if best_g[i] > 0:
+                                sum_gradients.append(1)
+                            elif best_g[i] < 0:
+                                sum_gradients.append(-1)
+                            else:
+                                sum_gradients.append(0)
+                        sum_gradients = np.array(sum_gradients)
+                        
+                        
+                        # x_prime = x_prime - sum_gradients * self.unit_by_feature # 이거 한줄이면 될거 아래 2줄 추가됌
+
+                        # 수정: torch tensor로 변환하면서, x_prime과 같은 dtype, device로 맞추기
+                        sum_gradients_tensor = torch.tensor(sum_gradients, dtype=x_prime.dtype, device=x_prime.device)
+
+                        # self.unit_by_feature가 리스트라면, torch tensor로 변환
+                        unit_by_feature_tensor = torch.tensor(self.unit_by_feature, dtype=x_prime.dtype, device=x_prime.device)
+
+                        # 이후 연산에서 모두 torch tensor를 사용
+                        x_prime = x_prime - sum_gradients_tensor * unit_by_feature_tensor
+                        print(f'x_prime : {x_prime}')
+                    # gradients : (List of ndarray)
+                    else:
+                    # gradients : (List of ndarray)|
+                    # (-1, 0, 1, .., 0), .., (1, 1, 1, .., 1) : # models
+                    # 앙상블 방향 계산
+                    # 각 모델별 방향 정보를 성분별로 더함 # 변수별 계산된 방향과 변수별 단위 곱하고 그걸 각 변수에 더하면 됨 # TODO : NN 모델 + DL 모델 앙상블인 경우 NN 모델에 대한 처리 필요
+                        # print(f'gradients : {gradients}')
+                        # print(f'unit_by_feature : {self.unit_by_feature}')
+                        # print(f'x_prime : {x_prime}')
+                        
+                        sum_gradients = sum(gradients) # List
+                        # x_prime = x_prime + sum_gradients * self.unit_by_feature
+
+                        # 수정: torch tensor로 변환하면서, x_prime과 같은 dtype, device로 맞추기
+                        sum_gradients_tensor = torch.tensor(sum_gradients, dtype=x_prime.dtype, device=x_prime.device)
+
+                        # self.unit_by_feature가 리스트라면, torch tensor로 변환
+                        unit_by_feature_tensor = torch.tensor(self.unit_by_feature, dtype=x_prime.dtype, device=x_prime.device)
+
+                        # 이후 연산에서 모두 torch tensor를 사용
+                        x_prime = x_prime + sum_gradients_tensor * unit_by_feature_tensor
+                        print(f'x_prime : {x_prime}')
+
+                    
+                    
 
 
                 prediction_avg = sum(predictions)/len(predictions)
